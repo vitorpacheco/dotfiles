@@ -1,0 +1,11 @@
+[user]
+	name = Vitor Pacheco
+	email = vitor-p.c@hotmail.com
+[github]
+	user = vitorpc
+	token = xxx
+[color]
+	ui = always
+	branch = always
+[core]
+	editor = vim
