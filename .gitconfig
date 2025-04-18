@@ -1,0 +1,5 @@
+[color]
+	ui = always
+	branch = always
+[core]
+	editor = vim
