@@ -1,5 +1,3 @@
-tap "homebrew/cask"
-
 # Clone of cat(1) with syntax highlighting and Git integration
 brew "bat"
 # Secure and free password manager for all of your devices

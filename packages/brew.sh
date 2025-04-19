@@ -1,4 +1,8 @@
 #!/bin/bash
 
-brew bundle --file=Brewfile
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+brew update
+brew upgrade
+brew bundle --file=./Brewfile
 
