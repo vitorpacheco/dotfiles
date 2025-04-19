@@ -8,6 +8,7 @@ fi
 ### ALIAS ###
 alias ls="eza --color=always --long --git --no-filesize --icons=always --no-time --no-user --no-permissions"
 alias bc="bat"
+alias zshconfig="nvim ~/.zshrc"
 ### ALIAS ###
 
 ### Homebrew ###
@@ -15,10 +16,12 @@ eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 ### Homebrew ###
 
 ### PATH ###
-export PATH=/snap/bin:$HOME/bin:/usr/local/bin:$HOME/.local/bin:$PATH
-export PATH=$HOME/.sdkman/candidates/java/current/bin:$PATH
-export PATH=$HOME/.sdkman/candidates/maven/current/bin:$PATH
-export PATH=$HOME/.sdkman/candidates/quarkus/current/bin:$PATH
+export PATH=$PATH:/snap/bin:$HOME/bin:/usr/local/bin:$HOME/.local/bin
+export PATH=$PATH:$HOME/.sdkman/candidates/java/current/bin
+export PATH=$PATH:$HOME/.sdkman/candidates/maven/current/bin
+export PATH=$PATH:$HOME/.sdkman/candidates/quarkus/current/bin
+export PATH=$PATH:/usr/local/go/bin
+export PATH=$PATH:$HOME/go/bin
 ### PATH ###
 
 ### ZSH ###
@@ -98,3 +101,7 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
 ### NVM ###
 
+### SDKMAN ###
+export SDKMAN_DIR="$HOME/.sdkman"
+[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
+### SDKMAN ###
