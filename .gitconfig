@@ -1,5 +1,5 @@
-[color]
-	ui = always
-	branch = always
 [core]
-	editor = vim
+	autocrlf = input
+	eol = lf
+[init]
+	defaultBranch = main
