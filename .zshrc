@@ -9,6 +9,7 @@ fi
 alias ls="eza --color=always --long --git --no-filesize --icons=always --no-time --no-user --no-permissions"
 alias bc="bat"
 alias zshconfig="nvim ~/.zshrc"
+alias nvimupd="cd ~/.config/nvim && git pull && cd -"
 ### ALIAS ###
 
 ### Homebrew ###

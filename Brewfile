@@ -20,3 +20,5 @@ brew "oh-my-posh"
 brew "spaceship"
 # Terminal multiplexer
 brew "tmux"
+# Syntax-highlighting pager for git and diff output
+brew "git-delta"
