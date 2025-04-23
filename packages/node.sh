@@ -8,5 +8,13 @@ nvm install --lts
 
 nvm use --lts
 
+nvm alias default node
+
 corepack enable yarn
 corepack enable pnpm
+
+npm i -g @anthropic-ai/claude-code
+npm i -g @openai/codex
+npm i -g skytrace
+npm i -g artillery
+npm i -g eas-cli
