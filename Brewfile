@@ -22,3 +22,9 @@ brew "spaceship"
 brew "tmux"
 # Syntax-highlighting pager for git and diff output
 brew "git-delta"
+# Ambitious Vim-fork focused on extensibility and agility
+brew "neovim"
+# Lazier way to manage everything docker
+brew "lazydocker"
+# Resource monitor. C++ version and continuation of bashtop and bpytop
+brew "btop"

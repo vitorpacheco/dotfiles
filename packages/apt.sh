@@ -9,7 +9,17 @@ PACKAGES=(
   curl
   unzip
   zip
+  flameshot
+  gnome-tweak-tool
+  vlc
+  gnome-shell-extension-manager
+  pipx
+  fastfetch
+  rofi
+  plocate
 )
+
+sudo add-apt-repository -y ppa:zhangsongcui3371/fastfetch
 
 sudo apt update
 sudo apt upgrade -y
