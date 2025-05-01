@@ -1,5 +1,12 @@
 #!/bin/bash
 
+# Center new windows in the middle of the screen
+gsettings set org.gnome.mutter center-new-windows true
+
+# Use 6 fixed workspaces instead of dynamic mode
+gsettings set org.gnome.mutter dynamic-workspaces false
+gsettings set org.gnome.desktop.wm.preferences num-workspaces 4
+
 # Use alt for pinned apps
 gsettings set org.gnome.shell.keybindings switch-to-application-1 "['<Alt>1']"
 gsettings set org.gnome.shell.keybindings switch-to-application-2 "['<Alt>2']"
@@ -16,8 +23,6 @@ gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-1 "['<Super>1
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-2 "['<Super>2']"
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-3 "['<Super>3']"
 gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-4 "['<Super>4']"
-gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-5 "['<Super>5']"
-gsettings set org.gnome.desktop.wm.keybindings switch-to-workspace-6 "['<Super>6']"
 
 # Reserve slots for custom keybindings
 gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "['/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom0/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom1/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom2/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom3/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom4/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom5/', '/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/custom6/']"
