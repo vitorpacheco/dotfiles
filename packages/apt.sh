@@ -17,6 +17,7 @@ PACKAGES=(
   fastfetch
   rofi
   plocate
+  nfs-common
 )
 
 sudo add-apt-repository -y ppa:zhangsongcui3371/fastfetch
