@@ -1,6 +1,8 @@
 #!/bin/bash
 
 PACKAGES=(
+  build-essential
+  zsh
   git
   git-delta
   htop
