@@ -5,27 +5,50 @@ if [ -z "$XDG_RUNTIME_DIR" ] || [ ! -d "$XDG_RUNTIME_DIR" ] || [ ! -w "$XDG_RUNT
   chmod 700 "$XDG_RUNTIME_DIR"
 fi
 
+
+#############
 ### ALIAS ###
+#############
 alias ls="eza --color=always --long --git --no-filesize --icons=always --no-time --no-user --no-permissions"
 alias bc="bat"
 alias zshconfig="nvim ~/.zshrc"
+alias upzshconfig="sourc ~/.zshrc"
 alias nvimupd="cd ~/.config/nvim && git pull && cd -"
-### ALIAS ###
 
+
+################
 ### Homebrew ###
+################
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-### Homebrew ###
 
+
+############
+### MISE ###
+############
+eval "$(mise activate --shims)"
+eval "$(mise activate zsh)"
+
+
+############
 ### PATH ###
+############
 export PATH=$PATH:/snap/bin:$HOME/bin:/usr/local/bin:$HOME/.local/bin
-export PATH=$PATH:$HOME/.sdkman/candidates/java/current/bin
-export PATH=$PATH:$HOME/.sdkman/candidates/maven/current/bin
-export PATH=$PATH:$HOME/.sdkman/candidates/quarkus/current/bin
 export PATH=$PATH:/usr/local/go/bin
 export PATH=$PATH:$HOME/go/bin
-### PATH ###
 
+
+############ ## PNPM ###
+############
+
+export PNPM_HOME="$HOME/.local/share/pnpm"
+case ":$PATH:" in
+  *":$PNPM_HOME:"*) ;;
+  *) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+
+###########
 ### ZSH ###
+###########
 export ZSH="$HOME/.oh-my-zsh"
 ZSH_THEME="robbyrussell"
 ZSH_TMUX_AUTOSTART=true
@@ -35,10 +58,8 @@ plugins=(
   git
   git-commit
   nodenv
-  nvm
   npm
   yarn
-  sdk
   docker
   docker-compose
   golang
@@ -50,13 +71,17 @@ plugins=(
 source $ZSH/oh-my-zsh.sh
 source <(fzf --zsh)
 eval "$(oh-my-posh init zsh --config https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/refs/heads/main/themes/amro.omp.json)"
-### ZSH ###
 
+
+###########
 ### BAT ###
+###########
 export BAT_THEME=tokyonight_night
-### BAT ###
 
+
+###########
 ### FZF ###
+###########
 export FZF_DEFAULT_COMMAND="fd --hidden --strip-cwd-prefix --exclude .git"
 export FZF_CTRL_T_COMMAND="$FZF_DEFAULT_COMMAND"
 export FZF_ALT_C_COMMAND="fd --type=d --hidden --strip-cwd-prefix --exclude .git"
@@ -94,15 +119,4 @@ _fzf_comprun() {
     *)            fzf --preview "$show_file_or_dir_preview"   "$@" ;;
   esac
 }
-### FZF ###
 
-### NVM ###
-export NVM_DIR="$HOME/.nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
-### NVM ###
-
-### SDKMAN ###
-export SDKMAN_DIR="$HOME/.sdkman"
-[[ -s "$HOME/.sdkman/bin/sdkman-init.sh" ]] && source "$HOME/.sdkman/bin/sdkman-init.sh"
-### SDKMAN ###

@@ -8,8 +8,6 @@ brew "eza"
 brew "fd"
 # Command-line fuzzy finder written in Go
 brew "fzf"
-# Open source programming language to build simple/reliable/efficient software
-brew "go"
 # Lightweight and flexible command-line JSON processor
 brew "jq"
 # Simple terminal UI for git commands
@@ -28,3 +26,13 @@ brew "neovim"
 brew "lazydocker"
 # Resource monitor. C++ version and continuation of bashtop and bpytop
 brew "btop"
+# Official Amazon AWS command-line interface
+brew "awscli"
+# Thin wrapper around the `aws` command-line interface for use with LocalStack
+brew "awscli-local"
+# Java language specific implementation of the Language Server Protocol
+brew "jdtls"
+# Lazier way to manage everything docker
+brew "lazydocker"
+# Package manager for the Lua programming language
+brew "luarocks"

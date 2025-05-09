@@ -19,3 +19,9 @@
 [diff]
   colorMoved = default
 
+[pull]
+	rebase = true
+
+[user]
+	name = Vitor Pacheco
+	email = vpacheco.costa@gmail.com
