@@ -9,7 +9,6 @@ if ! command -v mise &>/dev/null; then
 fi
 
 green "[NODE] instalando o node"
-
 mise use -g node@latest
 
 # Atualiza o yarn

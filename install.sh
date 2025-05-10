@@ -58,6 +58,7 @@ fi
 #################
 
 #source ./packages/node.sh
+source ./packages/sdk.sh
 
 
 ############
@@ -82,5 +83,4 @@ if [ -f gitconfig ]; then
 else
   red "[CONFIG-FILES] gitconfig não encontrado"
 fi
-
 
