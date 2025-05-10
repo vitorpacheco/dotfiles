@@ -14,7 +14,7 @@ yellow() { echo -e "\033[33m$*\033[0m"; }
 ### BASE PACKAGES ###
 #####################
 
-#source ./packages/apt.sh
+source ./packages/apt.sh
 
 #####################
 ### CUSTOMIZATION ###
@@ -41,13 +41,6 @@ source ./installers/tmux.sh
 ### CONFIGURATIONS FILES ###
 ############################
 
-if [ -f ./tmux.conf ]; then
-  cp ./tmux.conf "$HOME/.tmux.conf"
-  green "[CONFIG-FILES] .tmux.conf copiado"
-else
-  red "[CONFIG-FILES] tmux.conf não encontrado"
-fi
-
 if [ -f gitconfig ]; then
   if [ -f "$HOME/.gitconfig" ]; then
     yellow "[CONFIG-FILES] .gitconfig já existe"
@@ -58,5 +51,12 @@ if [ -f gitconfig ]; then
 else
   red "[CONFIG-FILES] gitconfig não encontrado"
 fi
+
+
+#################
+### LANGUAGES ###
+#################
+
+source ./packages/node.sh
 
 
