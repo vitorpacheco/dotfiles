@@ -15,7 +15,14 @@ else
   exit 1
 fi
 
-cd "$(dirname "$0")"
+CURRENT_DIR="$(dirname "$0")"
+APPS_DIR="${CURRENT_DIR}/config-files"
+PACKAGES_DIR="${CURRENT_DIR}/packages"
+INSTALLERS_DIR="${CURRENT_DIR}/installers"
+LANGUAGES_DIR="${CURRENT_DIR}/languages"
+CUSTOMIZATION_DIR="${CURRENT_DIR}/customization"
+
+cd "$CURRENT_DIR"
 
 # Funções para colorir a saída
 red()    { echo -e "\033[31m$*\033[0m"; }
@@ -27,29 +34,29 @@ yellow() { echo -e "\033[33m$*\033[0m"; }
 ### BASE PACKAGES ###
 #####################
 
-#source ./packages/apt.sh
+source "${PACKAGES_DIR}/apt.sh"
 
 
 #####################
 ### CUSTOMIZATION ###
 #####################
 
-source ./installers/bat-themes.sh
+source "${INSTALLERS_DIR}/bat-themes.sh"
 
 
 ##################
 ### INSTALLERS ###
 ##################
 
-#source ./installers/homebrew.sh
-#source ./installers/mise.sh
+source "${INSTALLERS_DIR}/homebrew.sh"
+source "${INSTALLERS_DIR}/mise.sh"
 
 ################
 ### PACKAGES ###
 ################
 
 if [[ "$DISTRO" == "ubuntu" || "$DISTRO" == "debian" ]]; then
-  source ./packages/brew.sh
+  source "${PACKAGES_DIR}/brew.sh"
 fi
 
 
@@ -57,16 +64,16 @@ fi
 ### LANGUAGES ###
 #################
 
-#source ./packages/node.sh
-source ./packages/sdk.sh
+source "${PACKAGES_DIR}/node.sh"
+source "${PACKAGES_DIR}/sdk.sh"
 
 
 ############
 ### APPS ###
 ############
 
-#source ./installers/tmux.sh
-source ./apps/ollama.sh
+source "${INSTALLERS_DIR}/tmux.sh"
+source "${APPS_DIR}/ollama.sh"
 
 
 ############################
