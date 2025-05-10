@@ -55,6 +55,23 @@ ARCH_PACKAGES=(
   plocate
   nfs-utils
   bat
+  bitwarden-cli
+  eza
+  fd
+  fzf
+  jq
+  lazygit
+  oh-my-posh
+  spaceship
+  tmux
+  neovim
+  lazydocker
+  btop
+  awscli
+  awscli-local
+  jdtls
+  lazydocker
+  luarocks
 )
 
 if [[ "$DISTRO" == "ubuntu" || "$DISTRO" == "debian" ]]; then

@@ -1,6 +1,19 @@
 #!/bin/bash
 
+#################
+### BOOTSTRAP ###
+#################
+
 set -e # Encerra o script se algum comando falhar
+
+DISTRO=""
+if [ -f /etc/os-release ]; then
+  source /etc/os-release
+  DISTRO=$ID
+else
+  red "[PKG] não foi possível identificar a distribuição linux"
+  exit 1
+fi
 
 cd "$(dirname "$0")"
 
@@ -14,7 +27,8 @@ yellow() { echo -e "\033[33m$*\033[0m"; }
 ### BASE PACKAGES ###
 #####################
 
-source ./packages/apt.sh
+#source ./packages/apt.sh
+
 
 #####################
 ### CUSTOMIZATION ###
@@ -22,19 +36,36 @@ source ./packages/apt.sh
 
 source ./installers/bat-themes.sh
 
+
 ##################
 ### INSTALLERS ###
 ##################
 
-source ./installers/homebrew.sh
-source ./installers/mise.sh
-
+#source ./installers/homebrew.sh
+#source ./installers/mise.sh
 
 ################
 ### PACKAGES ###
 ################
 
-source ./installers/tmux.sh
+if [[ "$DISTRO" == "ubuntu" || "$DISTRO" == "debian" ]]; then
+  source ./packages/brew.sh
+fi
+
+
+#################
+### LANGUAGES ###
+#################
+
+#source ./packages/node.sh
+
+
+############
+### APPS ###
+############
+
+#source ./installers/tmux.sh
+source ./apps/ollama.sh
 
 
 ############################
@@ -51,12 +82,5 @@ if [ -f gitconfig ]; then
 else
   red "[CONFIG-FILES] gitconfig não encontrado"
 fi
-
-
-#################
-### LANGUAGES ###
-#################
-
-source ./packages/node.sh
 
 
