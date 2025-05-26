@@ -1,10 +1,33 @@
 {
-    "workbench.iconTheme": "catppuccin-mocha",
-    "workbench.colorTheme": "Catppuccin Mocha",
-    "editor.minimap.enabled": false,
-    "editor.fontSize": 15,
-    "editor.fontFamily": "'JetBrainsMono Nerd Font', 'Droid Sans Mono', 'monospace', monospace",
-    "editor.fontVariations": true,
-    "editor.fontLigatures": false,
-    "terminal.integrated.gpuAcceleration": "off"
+  "debug.console.fontSize": 15,
+  "editor.fontFamily": "'JetBrainsMono Nerd Font', 'Droid Sans Mono', 'monospace', monospace",
+  "editor.fontLigatures": true,
+  "editor.fontSize": 15,
+  "editor.fontVariations": true,
+  "editor.minimap.enabled": false,
+  "editor.mouseWheelZoom": true,
+  "extensions.experimental.affinity": {
+    "asvetliakov.vscode-neovim": 1
+  },
+  "extensions.ignoreRecommendations": true,
+  "files.autoSave": "afterDelay",
+  "files.exclude": {
+    "node_modules": true,
+    "**/.classpath": true,
+    "**/.project": true,
+    "**/.settings": true,
+    "**/.factorypath": true
+  },
+  "files.trimTrailingWhitespace": true,
+  "terminal.external.osxExec": "iTerm.app",
+  "terminal.integrated.fontSize": 15,
+  "window.customTitleBarVisibility": "auto",
+  "window.menuBarVisibility": "compact",
+  "window.title": "${dirty}${activeEditorShort}${separator}${rootPath}${separator}${appName}",
+  "window.titleBarStyle": "custom",
+  "window.zoomPerWindow": false,
+  "window.zoomLevel": 1,
+  "workbench.colorTheme": "Catppuccin Mocha",
+  "workbench.iconTheme": "catppuccin-mocha"
 }
+
