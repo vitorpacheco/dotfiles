@@ -16,11 +16,13 @@ else
 fi
 
 CURRENT_DIR="$(dirname "$0")"
-APPS_DIR="${CURRENT_DIR}/config-files"
+APPS_DIR="${CURRENT_DIR}/apps"
 PACKAGES_DIR="${CURRENT_DIR}/packages"
+
 INSTALLERS_DIR="${CURRENT_DIR}/installers"
 LANGUAGES_DIR="${CURRENT_DIR}/languages"
 CUSTOMIZATION_DIR="${CURRENT_DIR}/customization"
+CONFIG_FILES_DIR="${CURRENT_DIR}/config-files"
 
 cd "$CURRENT_DIR"
 
@@ -34,7 +36,7 @@ yellow() { echo -e "\033[33m$*\033[0m"; }
 ### BASE PACKAGES ###
 #####################
 
-source "${PACKAGES_DIR}/apt.sh"
+source "${PACKAGES_DIR}/base-packages.sh"
 
 
 #####################

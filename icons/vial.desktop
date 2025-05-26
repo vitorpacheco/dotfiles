@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Vial
+Exec=sh -c "$HOME/Applications/Vial.AppImage"
+Icon=usr-vial
+Type=Application
+Categories=Utilities;

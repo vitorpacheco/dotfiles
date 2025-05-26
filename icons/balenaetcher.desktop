@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=balenaEtcher
+Exec=sh -c "$HOME/Applications/balenaEtcher/balena-etcher"
+Icon=usr-balenaetcher
+Type=Application
+Categories=Utilities;
+

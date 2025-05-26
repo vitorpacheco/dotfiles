@@ -62,13 +62,14 @@ ARCH_PACKAGES=(
   jq
   lazygit
   oh-my-posh
-  spaceship
+  spaceship-prompt
   tmux
   neovim
   lazydocker
   btop
-  awscli
-  awscli-local
+  aws-cli-git
+  python
+  python-awscli-local
   jdtls
   lazydocker
   luarocks
