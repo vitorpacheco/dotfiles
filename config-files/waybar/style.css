@@ -14,15 +14,16 @@
 }
 
 #workspaces {
-  border-radius: 5px;
+  font-size: 1.5rem;
+  border-radius: 8px;
   margin: 5px;
+  padding: 0.5rem 1rem;
   background: #101010;
-  margin-left: 1rem;
 }
 
 #workspaces button {
   color: #babbf1;
-  border-radius: 5px;
+  border-radius: 8px;
   padding: 0.4rem;
 }
 
@@ -44,7 +45,6 @@
   border-radius: 20px;
   margin-left: 0.5rem;
   margin-top: 0.5rem;
-  /* padding: 0.4rem; */
 }
 
 #custom-music,
@@ -53,22 +53,33 @@
 #clock,
 #battery,
 #pulseaudio,
+#battery,
 #network,
+#temperature,
+#bluetooth,
 #cpu,
 #memory,
 #custom-lock,
 #custom-power {
+  font-size: 1.5rem;
   background-color: #101010;
   padding: 0.5rem 1rem;
-  margin: 5px 0;
-  border-radius: 0px 5px 5px 0px;
+  margin: 5px;
+  border-radius: 8px;
 }
 
 #custom-stream_status {
   background-color: #101010;
   padding: 0.5rem 1rem;
   margin: 5px 0;
-  border-radius: 0px 5px 5px 0px;
+}
+
+#temperature {
+  color: #c3e88d;
+}
+
+#temperature.critical {
+  color: #ea999c;
 }
 
 #custom-stream_status.up {
@@ -83,14 +94,37 @@
   color: #ea999c;
 }
 
-#memory {
-  border-radius: 0px 5px 5px 0px;
+#memory,
+#cpu {
+  color: #8caaee;
 }
 
 #clock {
   color: #8caaee;
-  border-radius: 5px;
   margin-right: 1rem;
+}
+
+#network,
+#network.disconnected,
+#network.disabled,
+#bluetooth,
+#bluetooth.disabled,
+#bluetooth.off {
+  color: #e78284;
+}
+
+#bluetooth.on,
+#bluetooth.pairable,
+#bluetooth.discovering,
+#bluetooth.discoverable {
+  color: #8caaee;
+}
+
+#network.linked,
+#network.ethernet,
+#network.wifi,
+#bluetooth.connected {
+  color: #a6d189;
 }
 
 #battery {
@@ -109,14 +143,8 @@
   color: #e5c890;
 }
 
-#backlight,
-#battery {
-  border-radius: 0;
-}
-
 #pulseaudio {
-  color: #ea999c;
-  border-radius: 5px 0px 0px 5%;
+  color: #ca9ee6;
   margin-left: 1rem;
 }
 
@@ -126,14 +154,12 @@
 }
 
 #custom-lock {
-  border-radius: 5px 0px 0px 5px;
   color: #babbf1;
 }
 
 #custom-power {
-  margin-right: 1rem;
-  border-radius: 0px 5px 5px 0px;
   color: #e78284;
+  margin-right: 0.5rem;
 }
 
 #tray {

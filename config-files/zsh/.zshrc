@@ -89,7 +89,7 @@ source $ZSH/oh-my-zsh.sh
 autoload -Uz compinit
 compinit
 
-alias ls="eza --color=always --long --git --no-filesize --icons=always --no-time --no-user --no-permissions"
+alias ls="eza --color=always --long --git --icons=always --no-time --no-user"
 alias bc="bat"
 alias zshconfig="nvim ~/.zshrc"
 alias upzshconfig="source ~/.zshrc"
