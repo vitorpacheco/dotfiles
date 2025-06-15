@@ -1,0 +1,283 @@
+#!/usr/bin/env bash
+
+# Define colors for better output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+set -e # Encerra o script se algum comando falhar
+
+echo -e "${GREEN}Starting dotfiles installation...${NC}"
+
+# --- Variables ---
+DOTFILES_DIR="$(dirname "$(realpath "$0")")"
+CONFIG_DIR="$HOME/.config"
+LOCAL_SCRIPTS_DIR="$HOME/.local/scripts"
+
+CURRENT_DIR="$(dirname "$0")"
+
+cd "$CURRENT_DIR"
+
+echo -e "${GREEN}Updating git submodules...${NC}"
+git submodule update --init --recursive
+
+# --- Utility Functions ---
+
+# Function to check if a command exists
+command_exists () {
+  command -v "$1" >/dev/null 2>&1
+}
+
+# Function to check if the current desktop environment is GNOME
+is_gnome () {
+  if [ -n "$DESKTOP_SESSION" ] && [[ "$DESKTOP_SESSION" == *"gnome"* ]]; then
+    return 0 # True
+  elif [ -n "$XDG_CURRENT_DESKTOP" ] && [[ "$XDG_CURRENT_DESKTOP" == *"GNOME"* ]]; then
+    return 0 # True
+  fi
+  return 1 # False
+}
+
+# Function to log messages
+log_info () {
+  echo -e "${YELLOW}[INFO] $1${NC}"
+}
+
+log_success () {
+  echo -e "${GREEN}[SUCCESS] $1${NC}"
+}
+
+log_error () {
+  echo -e "${RED}[ERROR] $1${NC}"
+}
+
+# --- Installation Sections ---
+
+# 1. Install config files
+install_config_files () {
+  log_info "Installing config files to $CONFIG_DIR..."
+  mkdir -p "$CONFIG_DIR"
+  for file in "$DOTFILES_DIR/config-files"/*; do
+    if [ -e "$file" ]; then
+      cp -r "$file" "$CONFIG_DIR/"
+      log_success "Copied $(basename "$file") to $CONFIG_DIR"
+    else
+      log_error "No files found in $DOTFILES_DIR/config-files"
+    fi
+  done
+}
+
+# 2. Install user config files
+install_user_config_files () {
+  log_info "Installing user config files to $HOME..."
+  for file in "$DOTFILES_DIR/user-files"/*; do
+    if [ -e "$file" ]; then
+      cp -r "$file" "$HOME/"
+      log_success "Copied $(basename "$file") to $HOME"
+    else
+      log_error "No files found in $DOTFILES_DIR/user-files"
+    fi
+  done
+}
+
+# 3. Execute app installation scripts
+install_apps () {
+  log_info "Executing app installation scripts..."
+  for script in "$DOTFILES_DIR/apps"/*.sh; do
+    if [ -f "$script" ]; then
+      log_info "Executing $script..."
+      bash "$script" || log_error "Failed to execute $script"
+    else
+      log_error "No scripts found in $DOTFILES_DIR/apps"
+    fi
+  done
+}
+
+# 4. Execute GNOME-specific scripts
+install_gnome_scripts () {
+  if is_gnome; then
+    log_info "GNOME environment detected. Executing GNOME-specific scripts..."
+    for script in "$DOTFILES_DIR/gnome"/*.sh; do
+      if [ -f "$script" ]; then
+        log_info "Executing $script..."
+        bash "$script" || log_error "Failed to execute $script"
+      else
+        log_error "No scripts found in $DOTFILES_DIR/gnome"
+      fi
+    done
+  else
+    log_info "GNOME environment not detected. Skipping GNOME-specific scripts."
+  fi
+}
+
+# 5. Execute icons install script
+install_icons () {
+  log_info "Executing icons installation script..."
+  if [ -f "$DOTFILES_DIR/icons/install.sh" ]; then
+    bash "$DOTFILES_DIR/icons/install.sh" || log_error "Failed to execute icons/install.sh"
+  else
+    log_error "Icon installation script not found: $DOTFILES_DIR/icons/install.sh"
+  fi
+}
+
+# 6. Execute installers (e.g., download and install something)
+execute_installers () {
+  log_info "Executing installer scripts..."
+  for script in "$DOTFILES_DIR/installers"/*.sh; do
+    if [ -f "$script" ]; then
+      log_info "Executing $script..."
+      bash "$script" || log_error "Failed to execute $script"
+    else
+      log_error "No scripts found in $DOTFILES_DIR/installers"
+    fi
+  done
+}
+
+# 7. Install packages (assuming they are scripts or have a specific install method)
+# This section might need refinement based on how your "packages" are handled.
+# If they are just a list of package names, you'd use a package manager.
+# For now, I'm assuming they are executable scripts.
+install_packages () {
+  log_info "Executing package installation scripts..."
+  for script in "$DOTFILES_DIR/packages"/*.sh; do
+    if [ -f "$script" ]; then
+      log_info "Executing $script..."
+      bash "$script" || log_error "Failed to execute $script"
+    else
+      log_error "No scripts found in $DOTFILES_DIR/packages"
+    fi
+  done
+}
+
+# 8. Copy local scripts
+copy_local_scripts () {
+  log_info "Copying local scripts to $LOCAL_SCRIPTS_DIR..."
+  mkdir -p "$LOCAL_SCRIPTS_DIR"
+  for script in "$DOTFILES_DIR/scripts"/*; do
+    if [ -e "$script" ]; then
+      cp -r "$script" "$LOCAL_SCRIPTS_DIR/"
+      chmod +x "$LOCAL_SCRIPTS_DIR/$(basename "$script")" # Make them executable
+      log_success "Copied and made executable $(basename "$script") to $LOCAL_SCRIPTS_DIR"
+    else
+      log_error "No files found in $DOTFILES_DIR/scripts"
+    fi
+  done
+}
+
+# 9. Utils folder and selective execution
+# This will allow you to pass a flag like --utils="script1.sh,script2.sh"
+execute_utils () {
+  local scripts_to_execute="$1"
+  if [ -z "$scripts_to_execute" ]; then
+    log_info "No specific utility scripts requested."
+    return
+  fi
+
+  log_info "Executing selected utility scripts: $scripts_to_execute"
+  IFS=',' read -ra ADDR <<< "$scripts_to_execute"
+  for i in "${ADDR[@]}"; do
+    local script_path="$DOTFILES_DIR/utils/$i"
+    if [ -f "$script_path" ]; then
+      log_info "Executing $script_path..."
+      bash "$script_path" || log_error "Failed to execute $script_path"
+    else
+      log_error "Utility script not found: $script_path"
+    fi
+  done
+}
+
+# --- Main Logic ---
+
+# Parse command line arguments for selective execution
+# Usage: ./install.sh --utils="script1.sh,script2.sh" --install-gnome
+INSTALL_CONFIG=false
+INSTALL_USER_CONFIG=false
+INSTALL_APPS=false
+INSTALL_GNOME=false
+INSTALL_ICONS=false
+INSTALL_INSTALLERS=false
+INSTALL_PACKAGES=false
+INSTALL_LOCAL_SCRIPTS=false
+UTILITY_SCRIPTS=""
+
+for arg in "$@"; do
+  case $arg in
+    --install-config)
+      INSTALL_CONFIG=true
+      shift
+      ;;
+    --install-user-config)
+      INSTALL_USER_CONFIG=true
+      shift
+      ;;
+    --install-apps)
+      INSTALL_APPS=true
+      shift
+      ;;
+    --install-gnome)
+      INSTALL_GNOME=true
+      shift
+      ;;
+    --install-icons)
+      INSTALL_ICONS=true
+      shift
+      ;;
+    --install-installers)
+      INSTALL_INSTALLERS=true
+      shift
+      ;;
+    --install-packages)
+      INSTALL_PACKAGES=true
+      shift
+      ;;
+    --install-local-scripts)
+      INSTALL_LOCAL_SCRIPTS=true
+      shift
+      ;;
+    --utils=*)
+      UTILITY_SCRIPTS="${arg#*=}"
+      shift
+      ;;
+    *)
+      # Unknown option
+      ;;
+  esac
+done
+
+# Execute sections based on flags
+if "$INSTALL_CONFIG"; then
+  install_config_files
+fi
+
+if "$INSTALL_USER_CONFIG"; then
+  install_user_config_files
+fi
+
+if "$INSTALL_APPS"; then
+  install_apps
+fi
+
+if "$INSTALL_GNOME"; then
+  install_gnome_scripts
+fi
+
+if "$INSTALL_ICONS"; then
+  install_icons
+fi
+
+if "$INSTALL_INSTALLERS"; then
+  execute_installers
+fi
+
+if "$INSTALL_PACKAGES"; then
+  install_packages
+fi
+
+if "$INSTALL_LOCAL_SCRIPTS"; then
+  copy_local_scripts
+fi
+
+execute_utils "$UTILITY_SCRIPTS"
+
+log_success "Dotfiles installation complete!"

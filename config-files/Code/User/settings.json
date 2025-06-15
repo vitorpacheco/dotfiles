@@ -21,6 +21,7 @@
   "files.trimTrailingWhitespace": true,
   "terminal.external.osxExec": "iTerm.app",
   "terminal.integrated.fontSize": 15,
+  "terminal.integrated.gpuAcceleration": "off",
   "window.customTitleBarVisibility": "auto",
   "window.menuBarVisibility": "compact",
   "window.title": "${dirty}${activeEditorShort}${separator}${rootPath}${separator}${appName}",
@@ -30,4 +31,3 @@
   "workbench.colorTheme": "Catppuccin Mocha",
   "workbench.iconTheme": "catppuccin-mocha"
 }
-

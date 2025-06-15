@@ -1,0 +1,71 @@
+[[language]]
+name = "toml"
+auto-format = true
+# https://github.com/bd82/toml-tools/tree/master/packages/prettier-plugin-toml
+formatter = { command = "prettier", args = ["--parser", "toml"] }
+
+[[language]]
+name = "json"
+formatter = { command = "prettier", args = ["--parser", "json"] }
+
+[[language]]
+name = "javascript"
+auto-format = true
+
+[[language]]
+name = "python"
+auto-format = true
+
+[language-server.pylsp.config.pylsp]
+plugins.ruff.enabled = true
+plugins.black.enabled = true
+
+[[language]]
+name = "typescript"
+auto-format = true
+
+[[language]]
+name = "markdown.inline"
+scope = "source.markdown.inline"
+injection-regex = "markdown\\.inline"
+file-types = []
+grammar = "markdown_inline"
+
+[[language]]
+name = "go"
+config = { "formatting.gofumpt" = true }
+
+[[language]]
+name = "yaml"
+indent = { tab-width = 0, unit = "  " }
+formatter = { command = "prettier", args = ["--parser", "yaml"] }
+
+[[language]]
+name = "go"
+scope = "source.go"
+injection-regex = "go"
+file-types = ["go"]
+roots = ["go.work", "go.mod"]
+auto-format = true
+comment-token = "//"
+block-comment-tokens = { start = "/*", end = "*/" }
+language-servers = [ "gopls", "golangci-lint-lsp" ]
+# TODO: gopls needs utf-8 offsets?
+indent = { tab-width = 4, unit = "\t" }
+
+[language-server.gopls]
+command = "gopls"
+
+[language-server.gopls.config.hints]
+assignVariableTypes = true
+compositeLiteralFields = true
+constantValues = true
+functionTypeParameters = true
+parameterNames = true
+rangeVariableTypes = true
+
+[language-server.golangci-lint-lsp]
+command = "golangci-lint-langserver"
+
+[language-server.golangci-lint-lsp.config]
+command = ["golangci-lint", "run", "--out-format", "json", "--issues-exit-code=1"]

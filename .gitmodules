@@ -1,3 +1,12 @@
 [submodule "nvim"]
 	path = config-files/nvim
 	url = git@github.com:vitorpacheco/nvim-config.git
+  branch = new-meta
+[submodule "tmux-catppuccin"]
+	path = user-files/.tmux/plugins/tmux
+	url = git@github.com:catppuccin/tmux.git
+  branch = main
+[submodule "tmux-tmp"]
+  path = user-files/.tmux/plugins/tpm
+  url = git@github.com:tmux-plugins/tpm.git
+  branch = master

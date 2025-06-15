@@ -60,7 +60,8 @@
 #cpu,
 #memory,
 #custom-lock,
-#custom-power {
+#custom-power,
+#custom-power-rofi {
   font-size: 1.5rem;
   background-color: #101010;
   padding: 0.5rem 1rem;
@@ -157,7 +158,8 @@
   color: #babbf1;
 }
 
-#custom-power {
+#custom-power,
+#custom-power-rofi {
   color: #e78284;
   margin-right: 0.5rem;
 }

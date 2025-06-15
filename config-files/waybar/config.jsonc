@@ -34,8 +34,9 @@
     "battery",
     //"battery#bat1",
     //"clock",
-    // "tray",
-    "custom/power"
+    "tray",
+    // "custom/power",
+    "custom/power-rofi"
   ],
   // Modules configuration
   //"sway/workspaces": {
@@ -193,7 +194,7 @@
     "format-linked": "{ifname} (No IP) ",
     "format-disconnected": "⚠",
     "tooltip": false,
-    "on-click": "nm-connection-editor",
+    "on-click": "iwgtk",
     "interval": 5
   },
   "bluetooth": {
@@ -250,6 +251,11 @@
     //   "suspend": "systemctl suspend",
     //   "hibernate": "systemctl hibernate"
     // }
+  },
+  "custom/power-rofi": {
+    "format": "",
+    "tooltip": false,
+    "on-click": "~/.local/scripts/power_menu"
   },
   "custom/notification": {
     "tooltip": false,

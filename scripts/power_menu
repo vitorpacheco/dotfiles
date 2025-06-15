@@ -1,0 +1,31 @@
+#!/bin/bash
+
+# Define the options for the power menu
+options="\uF008  Logout\n\uF023  Lock\n\uF00A  Suspend\n\uF021  Reboot\n\uF011  Shutdown"
+
+# Use rofi to display the options and capture the choice
+choice=$(echo -e "$options" | rofi -dmenu -p "Power Options" \
+  -lines 5 -columns 1 - width 20 \
+  -theme-str 'listview { lines: 5; columns: 1; }' \
+  -theme-str 'window { width: 20%; }' \
+  -theme-str 'element { padding: 8px; }')
+
+# Act based on the user's choice
+case "$choice" in
+  Logout)
+    hyprctl dispatch exit &
+    ;;
+  Lock)
+    hyprlock &
+    ;;
+  Suspend)
+    systemctl suspend &
+    ;;
+  Reboot)
+    systemctl reboot &
+    ;;
+  Shutdown)
+    systemctl poweroff &
+    ;;
+esac
+
