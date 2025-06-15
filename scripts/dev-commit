@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-pushd ~/personal/dotfiles/config-files/nvim
+pushd ~/personal/nvim
 git add .
 git commit -m 'automated dev commit'
 git push

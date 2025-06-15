@@ -1,0 +1,145 @@
+#!/bin/bash
+
+# Define colors for better output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}Starting dotfiles backup...${NC}"
+
+# --- Variables ---
+# Get the directory where the script is located
+DOTFILES_DIR="$(dirname "$(realpath "$0")")"
+USER_HOME="$HOME"
+
+# Define the target directories within your dotfiles repo
+DOTFILES_USER_FILES_DIR="$DOTFILES_DIR/user-files"
+DOTFILES_CONFIG_DIR="$DOTFILES_DIR/config-files"
+
+# List of files and directories directly in the home folder to backup
+# from your 'user-files' list
+USER_HOME_ITEMS=(
+    ".bash_profile"
+    ".bashrc"
+    ".codex"
+    ".gitconfig"
+    ".opencode.json"
+    ".profile"
+    ".tmux"
+    ".tmux.conf"
+    ".vimrc"
+    ".zsh_profile"
+    ".zshrc"
+)
+
+# List of directories within ~/.config to backup
+# from your 'config-files' list
+CONFIG_DIR_ITEMS=(
+    "bat"
+    "btop"
+    "Code"
+    "eza"
+    "fzf"
+    "ghostty"
+    "helix"
+    "homebrew"
+    "hypr"
+    "kbd"
+    "kitty"
+    "lazydocker"
+    "lazygit"
+    "mise"
+    "nwg-look"
+    "personal"
+    "rofi"
+    "swaync"
+    "tmux-sessionizer"
+    "Vial"
+    "waybar"
+    "wireplumber"
+    "wlogout"
+)
+
+# List of specific files within ~/.config to backup (user-dirs.dirs)
+CONFIG_FILES=(
+    "user-dirs.dirs"
+)
+
+
+# --- Utility Functions ---
+
+log_info () {
+  echo -e "${YELLOW}[INFO] $1${NC}"
+}
+
+log_success () {
+  echo -e "${GREEN}[SUCCESS] $1${NC}"
+}
+
+log_error () {
+  echo -e "${RED}[ERROR] $1${NC}"
+}
+
+# Function to copy a file or directory with overwrite confirmation
+copy_item () {
+  local source_path="$1"
+  local dest_path="$2"
+  local item_name=$(basename "$source_path")
+
+  if [ -e "$source_path" ]; then
+    log_info "Backing up $item_name..."
+    # Using 'cp -r' for both files and directories.
+    # The -f (force) flag ensures it overwrites without prompting.
+    # The -p (preserve) flag preserves mode, ownership, and timestamps.
+    cp -rp "$source_path" "$dest_path"
+    if [ $? -eq 0 ]; then
+      log_success "Copied $item_name to $dest_path"
+    else
+      log_error "Failed to copy $item_name"
+    fi
+  else
+    log_info "Source not found, skipping: $source_path"
+  fi
+}
+
+# --- Backup Sections ---
+
+# 1. Backup user home files/directories
+backup_user_home_items () {
+  log_info "Backing up items from $USER_HOME to $DOTFILES_USER_FILES_DIR..."
+  mkdir -p "$DOTFILES_USER_FILES_DIR" # Ensure destination directory exists
+
+  for item in "${USER_HOME_ITEMS[@]}"; do
+    copy_item "$USER_HOME/$item" "$DOTFILES_USER_FILES_DIR/"
+  done
+}
+
+# 2. Backup ~/.config directories
+backup_config_directories () {
+  log_info "Backing up directories from $USER_HOME/.config to $DOTFILES_CONFIG_DIR..."
+  mkdir -p "$DOTFILES_CONFIG_DIR" # Ensure destination directory exists
+
+  for item in "${CONFIG_DIR_ITEMS[@]}"; do
+    copy_item "$USER_HOME/.config/$item" "$DOTFILES_CONFIG_DIR/"
+  done
+}
+
+# 3. Backup specific ~/.config files
+backup_config_files () {
+  log_info "Backing up specific files from $USER_HOME/.config to $DOTFILES_CONFIG_DIR..."
+  mkdir -p "$DOTFILES_CONFIG_DIR" # Ensure destination directory exists
+
+  for item in "${CONFIG_FILES[@]}"; do
+    copy_item "$USER_HOME/.config/$item" "$DOTFILES_CONFIG_DIR/"
+  done
+}
+
+
+# --- Main Logic ---
+
+backup_user_home_items
+backup_config_directories
+backup_config_files
+
+log_success "Dotfiles backup complete!"
