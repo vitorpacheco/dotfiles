@@ -60,6 +60,10 @@ install_config_files () {
   log_info "Installing config files to $CONFIG_DIR..."
   mkdir -p "$CONFIG_DIR"
   for file in "$DOTFILES_DIR/config-files"/*; do
+    if [ "$(basename "$file")" == "nvim" ]; then
+      continue # Skip nvim config for now
+    fi
+
     if [ -e "$file" ]; then
       cp -r "$file" "$CONFIG_DIR/"
       log_success "Copied $(basename "$file") to $CONFIG_DIR"

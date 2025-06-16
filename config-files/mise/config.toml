@@ -16,8 +16,5 @@ quarkus = "3.22"
 ruby = "3.4"
 rust = "1.86"
 spring-boot = "3.4"
-zig = "0.14.1"
+zig = "0.14"
 php = "8.4"
-
-[settings]
-idiomatic_version_file_enable_tools = []
