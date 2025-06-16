@@ -6,7 +6,8 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
-set -e # Encerra o script se algum comando falhar
+set -e
+shopt -s dotglob
 
 echo -e "${GREEN}Starting dotfiles installation...${NC}"
 
@@ -72,6 +73,18 @@ install_config_files () {
 install_user_config_files () {
   log_info "Installing user config files to $HOME..."
   for file in "$DOTFILES_DIR/user-files"/*; do
+    if [ "$(basename "$file")" == "." ] || [ "$(basename "$file")" == ".." ]; then
+      continue
+    fi
+
+    if [ "$(basename "$file")" == ".git" ]; then
+      continue
+    fi
+
+    if [ "$(basename "$file")" == ".tmux" ]; then
+      continue # Skip .tmux files for now
+    fi
+
     if [ -e "$file" ]; then
       cp -r "$file" "$HOME/"
       log_success "Copied $(basename "$file") to $HOME"
@@ -279,5 +292,7 @@ if "$INSTALL_LOCAL_SCRIPTS"; then
 fi
 
 execute_utils "$UTILITY_SCRIPTS"
+
+shopt -u dotglob
 
 log_success "Dotfiles installation complete!"

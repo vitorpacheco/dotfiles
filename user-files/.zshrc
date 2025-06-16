@@ -4,6 +4,7 @@
 source ~/.zsh_profile
 
 eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+eval "$(zoxide init zsh)"
 eval "$(mise activate --shims)"
 eval "$(mise activate zsh)"
 
@@ -98,6 +99,15 @@ plugins=(
   zsh-syntax-highlighting
 )
 
+setopt share_history
+setopt hist_expire_dups_first
+setopt hist_ignore_dups
+setopt hist_verify
+
+# completion using arrow keys (based on history)
+bindkey '^[[A' history-search-backward
+bindkey '^[[B' history-search-forward
+
 source $ZSH/oh-my-zsh.sh
 
 autoload -Uz compinit
@@ -133,12 +143,19 @@ compinit
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
 alias code="code --disable-gpu"
-alias ls="eza --color=always --long --git --icons=always --no-time --no-user"
+alias ls="eza --color=always --long --git --icons=always --no-time"
+alias cd="z"
 alias bc="bat"
 alias zshconfig="nvim ~/.zshrc"
 alias upzshconfig="source ~/.zshrc"
 alias nvimupd="cd ~/.config/nvim && git pull && cd -"
+alias awsume=". awsume"
 
 # binds...
 bindkey -s ^f "tmux-sessionizer\n"
+
+bw_unlock() {
+  export BW_SESSION=$(bw unlock --raw)
+}
+
 
