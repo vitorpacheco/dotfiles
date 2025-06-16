@@ -184,6 +184,8 @@ clean_vscode_config () {
     "*Cache"
     "Crashpad"
     "Shared Dictionary"
+    "Service Worker"
+    ".org.chromium.Chromiu*"
   )
 
   local specific_folders=(
