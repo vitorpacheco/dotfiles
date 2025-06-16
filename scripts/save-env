@@ -10,7 +10,7 @@ echo -e "${GREEN}Starting dotfiles backup...${NC}"
 
 # --- Variables ---
 # Get the directory where the script is located
-DOTFILES_DIR="$(dirname "$(realpath "$0")")"
+DOTFILES_DIR="$HOME/personal/dotfiles"
 USER_HOME="$HOME"
 
 # Define the target directories within your dotfiles repo
@@ -86,21 +86,145 @@ copy_item () {
   local source_path="$1"
   local dest_path="$2"
   local item_name=$(basename "$source_path")
+  local item_dest_path="$dest_path$item_name" # Full path to where the item will land
 
   if [ -e "$source_path" ]; then
     log_info "Backing up $item_name..."
-    # Using 'cp -r' for both files and directories.
-    # The -f (force) flag ensures it overwrites without prompting.
-    # The -p (preserve) flag preserves mode, ownership, and timestamps.
-    cp -rp "$source_path" "$dest_path"
-    if [ $? -eq 0 ]; then
-      log_success "Copied $item_name to $dest_path"
+
+    if [ "$item_name" == ".tmux" ]; then
+      log_info "Using rsync with exclusions for .tmux folder... $source_path -> $item_dest_path "
+      # --delete-excluded: Deletes excluded files on the destination if they exist
+      # -a: archive mode (preserves permissions, timestamps, etc., and recursive)
+      # --exclude 'plugins/': Excludes the plugins directory and its contents
+      # The trailing slash on source_path ('$source_path/') is important for rsync
+      # to copy the *contents* of .tmux into the destination, not .tmux itself.
+      rsync -a --delete-excluded --exclude 'plugins/' "$source_path/" "$item_dest_path/"
+      if [ $? -eq 0 ]; then
+        log_success "Rsync'd .tmux to $item_dest_path (plugins excluded)"
+        return 0
+      else
+        log_error "Failed to rsync .tmux"
+        return 1
+      fi
     else
-      log_error "Failed to copy $item_name"
+      # Using 'cp -r' for both files and directories.
+      # The -f (force) flag ensures it overwrites without prompting.
+      # The -p (preserve) flag preserves mode, ownership, and timestamps.
+      cp -rp "$source_path" "$dest_path"
+      if [ $? -eq 0 ]; then
+        log_success "Copied $item_name to $dest_path"
+      else
+        log_error "Failed to copy $item_name"
+      fi
     fi
   else
     log_info "Source not found, skipping: $source_path"
   fi
+}
+
+load_git_submodules () {
+  log_info "Loading git submodules..."
+
+  if git submodule update --init --recursive; then
+    log_success "Submodules updated"
+  else
+    log_error "Failed to update git submodules"
+  fi
+}
+
+clean_codex_config () {
+  local codex_config_path="$1"
+  log_info "Cleaning Codex files in $codex_config_path..."
+
+  local patterns_to_remove=(
+    "auth.json"
+    "sessions"
+  )
+
+  # Check if the VS Code config path exists
+  if [ ! -d "$codex_config_path" ]; then
+    log_error "Codex config directory not found for cleaning: $codex_config_path"
+    return 1
+  fi
+
+  for pattern in "${patterns_to_remove[@]}"; do
+    # Use find to locate and remove files/directories matching the pattern
+    # -maxdepth 1 ensures it only looks in the current directory, not subdirectories
+    # -print0 and xargs -0 are for safely handling filenames with spaces or special characters
+    find "$codex_config_path" -maxdepth 1 -name "$pattern" -print0 | xargs -0 rm -rf
+    if [ $? -eq 0 ]; then
+      log_success "Removed pattern: $pattern from $codex_config_path"
+    else
+      log_error "Failed to remove pattern: $pattern from $codex_config_path"
+    fi
+  done
+
+}
+
+# Function to clean specific VS Code cache/temp files within its config folder
+clean_vscode_config () {
+  local vscode_config_path="$1"
+  log_info "Cleaning VS Code files in $vscode_config_path..."
+
+  # Define an array of patterns to remove
+  local patterns_to_remove=(
+    "Backups"
+    "blob_storage"
+    "CachedExtensionVSIXs"
+    "Cookies*"
+    "logs"
+    "Session Storage"
+    "Trust*"
+    "Cache*"
+    "*Storage"
+    "Dawn*"
+    "machineid"
+    "TransportSecurity"
+    "Network Persistent State"
+    "*Cache"
+    "Crashpad"
+    "Shared Dictionary"
+  )
+
+  local specific_folders=(
+    "User/globalStorage"
+    "User/History"
+    "User/sync"
+    "User/workspaceStorage"
+  )
+
+  # Check if the VS Code config path exists
+  if [ ! -d "$vscode_config_path" ]; then
+    log_error "VS Code config directory not found for cleaning: $vscode_config_path"
+    return 1
+  fi
+
+  for pattern in "${patterns_to_remove[@]}"; do
+    # Use find to locate and remove files/directories matching the pattern
+    # -maxdepth 1 ensures it only looks in the current directory, not subdirectories
+    # -print0 and xargs -0 are for safely handling filenames with spaces or special characters
+    find "$vscode_config_path" -maxdepth 1 -name "$pattern" -print0 | xargs -0 rm -rf
+    if [ $? -eq 0 ]; then
+      log_success "Removed pattern: $pattern from $vscode_config_path"
+    else
+      log_error "Failed to remove pattern: $pattern from $vscode_config_path"
+    fi
+  done
+
+  # --- Specific nested directories to remove ---
+  # Add specific rm -rf commands for nested paths
+  log_info "Removing specific folders from VSCode"
+  for specifc_folder in "${specific_folders[@]}"; do
+    log_info "Removing $vscode_config_path/$specifc_folder..."
+    if [ "$specifc_folder" != "" ] && [ -d "$vscode_config_path/$specifc_folder" ]; then
+      rm -rf "$vscode_config_path/$specifc_folder"
+      if [ $? -eq 0 ]; then
+        log_success "Removed $vscode_config_path/$specifc_folder"
+      else
+        log_error "Failed to remove $vscode_config_path/$specifc_folder"
+      fi
+    fi
+  done
 }
 
 # --- Backup Sections ---
@@ -111,7 +235,12 @@ backup_user_home_items () {
   mkdir -p "$DOTFILES_USER_FILES_DIR" # Ensure destination directory exists
 
   for item in "${USER_HOME_ITEMS[@]}"; do
-    copy_item "$USER_HOME/$item" "$DOTFILES_USER_FILES_DIR/"
+    if copy_item "$USER_HOME/$item" "$DOTFILES_USER_FILES_DIR/"; then
+      if [ "$item" == ".codex" ]; then
+        log_info "Calling clean_codex_config for $DOTFILES_USER_FILES_DIR/$item"
+        clean_codex_config "$DOTFILES_USER_FILES_DIR/$item"
+      fi
+    fi
   done
 }
 
@@ -121,7 +250,13 @@ backup_config_directories () {
   mkdir -p "$DOTFILES_CONFIG_DIR" # Ensure destination directory exists
 
   for item in "${CONFIG_DIR_ITEMS[@]}"; do
-    copy_item "$USER_HOME/.config/$item" "$DOTFILES_CONFIG_DIR/"
+    if copy_item "$USER_HOME/.config/$item" "$DOTFILES_CONFIG_DIR/"; then
+      # If the copy was successful AND the item is "Code", then clean it
+      if [ "$item" == "Code" ]; then
+        log_info "Calling clean_vscode_config for $DOTFILES_CONFIG_DIR/$item"
+        clean_vscode_config "$DOTFILES_CONFIG_DIR/$item"
+      fi
+    fi
   done
 }
 
@@ -141,5 +276,6 @@ backup_config_files () {
 backup_user_home_items
 backup_config_directories
 backup_config_files
+load_git_submodules
 
 log_success "Dotfiles backup complete!"
