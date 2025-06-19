@@ -25,6 +25,38 @@ git submodule update --init --recursive
 
 # --- Utility Functions ---
 
+# --- Function to display help message ---
+show_help () {
+  echo -e "${GREEN}Usage: $(basename "$0") [OPTIONS]${NC}"
+  echo ""
+  echo "Installs dotfiles and config files to your system."
+  echo ""
+  echo -e "${YELLOW}Options:${NC}"
+  echo "  --help                       Show this help message and exit."
+  echo ""
+  echo -e "${YELLOW}Individual Installation Steps (use one or more):${NC}"
+  echo "  --config             Install files from config-files/ to ~/.config/"
+  echo "  --user-config        Install files/dirs from user-files/ to ~/ (e.g., .bashrc, .tmux)"
+  echo "  --apps               Execute scripts in apps/ (e.g., install Spotify, Brave)"
+  echo "  --gnome              Execute scripts in gnome/ (only if GNOME desktop is detected)"
+  echo "  --icons              Execute icons/install.sh"
+  echo "  --installers         Execute scripts in installers/ (e.g., download & setup tools)"
+  echo "  --packages           Execute scripts in packages/ (e.g., install system packages)"
+  echo "  --local-scripts      Copy scripts from scripts/ to ~/.local/scripts/ and make them executable"
+  echo ""
+  echo -e "${YELLOW}Utility Scripts (from utils/):${NC}"
+  echo "  --utils=\"script1.sh,script2.sh\" Execute specific scripts from utils/ (comma-separated list)"
+  echo ""
+  echo -e "${YELLOW}Default Behavior:${NC}"
+  echo "  If no options are provided, this script will show this help message."
+  echo "  You must specify which installation steps to run."
+  echo ""
+  echo "Example:"
+  echo "  $(basename "$0") --install-user-config --install-apps --utils=\"post_setup.sh\""
+  echo "  $(basename "$0") --help"
+  echo ""
+}
+
 # Function to check if a command exists
 command_exists () {
   command -v "$1" >/dev/null 2>&1
@@ -217,38 +249,43 @@ INSTALL_INSTALLERS=false
 INSTALL_PACKAGES=false
 INSTALL_LOCAL_SCRIPTS=false
 UTILITY_SCRIPTS=""
+SHOW_HELP=false
 
 for arg in "$@"; do
   case $arg in
-    --install-config)
+    --help)
+      SHOW_HELP=true
+      shift
+      ;;
+    --config)
       INSTALL_CONFIG=true
       shift
       ;;
-    --install-user-config)
+    --user-config)
       INSTALL_USER_CONFIG=true
       shift
       ;;
-    --install-apps)
+    --apps)
       INSTALL_APPS=true
       shift
       ;;
-    --install-gnome)
+    --gnome)
       INSTALL_GNOME=true
       shift
       ;;
-    --install-icons)
+    --icons)
       INSTALL_ICONS=true
       shift
       ;;
-    --install-installers)
+    --installers)
       INSTALL_INSTALLERS=true
       shift
       ;;
-    --install-packages)
+    --packages)
       INSTALL_PACKAGES=true
       shift
       ;;
-    --install-local-scripts)
+    --local-scripts)
       INSTALL_LOCAL_SCRIPTS=true
       shift
       ;;
@@ -257,10 +294,18 @@ for arg in "$@"; do
       shift
       ;;
     *)
-      # Unknown option
+      log_error "Unknown argument: $arg"
+      show_help # Show help for unknown args too
+      exit 1
       ;;
   esac
 done
+
+# If help was requested or no arguments were provided
+if "$SHOW_HELP"; then
+  show_help
+  exit 0
+fi
 
 # Execute sections based on flags
 if "$INSTALL_CONFIG"; then
