@@ -8,23 +8,24 @@ choice=$(echo -e "$options" | rofi -dmenu -p "Power Options" \
   -lines 5 -columns 1 - width 20 \
   -theme-str 'listview { lines: 5; columns: 1; }' \
   -theme-str 'window { width: 20%; }' \
-  -theme-str 'element { padding: 8px; }')
+  -theme-str 'element { padding: 8px; }'
+)
 
 # Act based on the user's choice
 case "$choice" in
-  Logout)
+  *Logout)
     hyprctl dispatch exit &
     ;;
-  Lock)
+  *Lock)
     hyprlock &
     ;;
-  Suspend)
+  *Suspend)
     systemctl suspend &
     ;;
-  Reboot)
+  *Reboot)
     systemctl reboot &
     ;;
-  Shutdown)
+  *Shutdown)
     systemctl poweroff &
     ;;
 esac
