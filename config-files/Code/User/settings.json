@@ -21,8 +21,8 @@
     "debug.console.fontSize": 15,
     "terminal.integrated.fontSize": 15,
     "window.zoomPerWindow": false,
+    "diffEditor.ignoreTrimWhitespace": false,
     "editor.mouseWheelZoom": true,
-    "window.zoomLevel": 1,
     "files.trimTrailingWhitespace": true,
     "window.menuBarVisibility": "compact",
     "extensions.experimental.affinity": {

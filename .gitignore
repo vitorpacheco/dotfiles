@@ -1,1 +1,6 @@
 *.deb
+**/Code/DIPS
+**/Code/DIPS-shm
+**/Code/DIPS-wal
+**/Code/SharedStorage-wal
+**/Code/code.lock
