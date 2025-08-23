@@ -1,171 +1,51 @@
+@import "../omarchy/current/theme/waybar.css";
+
 * {
-  font-family: JetbrainsMono Nerd Font;
-  font-size: 20px;
+  background-color: @background;
+  color: @foreground;
+
+  border: none;
+  border-radius: 0;
   min-height: 0;
-  padding-right: 2px;
-  padding-left: 2px;
-  padding-bottom: 0px;
+  font-family: CaskaydiaMono Nerd Font;
+  font-size: 12px;
 }
 
-#waybar {
-  background: transparent;
-  color: #c6d0f5;
-  margin: 2px 2px;
+.modules-left {
+  margin-left: 8px;
 }
 
-#workspaces {
-  font-size: 1.5rem;
-  border-radius: 8px;
-  margin: 5px;
-  padding: 0.5rem 1rem;
-  background: #101010;
+.modules-right {
+  margin-right: 8px;
 }
 
 #workspaces button {
-  color: #babbf1;
-  border-radius: 8px;
-  padding: 0.4rem;
+  all: initial;
+  padding: 0 6px;
+  margin: 0 1.5px;
+  min-width: 9px;
 }
 
-#workspaces button.active {
-  color: #99d1db;
-  border-radius: 5px;
+#workspaces button.empty {
+  opacity: 0.5;
 }
 
-#workspaces button:hover {
-  color: #85c1dc;
-  border-radius: 5px;
-}
-
-#custom-notification {
-  font-family: "JetbrainsMono Nerd Font";
-}
-
-#window {
-  border-radius: 20px;
-  margin-left: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-#custom-music,
 #tray,
-#backlight,
-#clock,
-#battery,
-#pulseaudio,
-#battery,
-#network,
-#temperature,
-#bluetooth,
 #cpu,
-#memory,
-#custom-lock,
-#custom-power,
-#custom-power-rofi {
-  font-size: 1.5rem;
-  background-color: #101010;
-  padding: 0.5rem 1rem;
-  margin: 5px;
-  border-radius: 8px;
-}
-
-#custom-stream_status {
-  background-color: #101010;
-  padding: 0.5rem 1rem;
-  margin: 5px 0;
-}
-
-#temperature {
-  color: #c3e88d;
-}
-
-#temperature.critical {
-  color: #ea999c;
-}
-
-#custom-stream_status.up {
-  color: #c3e88d;
-}
-
-#custom-stream_status.warning {
-  color: #ff9e64;
-}
-
-#custom-stream_status.down {
-  color: #ea999c;
-}
-
-#memory,
-#cpu {
-  color: #8caaee;
-}
-
-#clock {
-  color: #8caaee;
-  margin-right: 1rem;
-}
-
+#battery,
 #network,
-#network.disconnected,
-#network.disabled,
 #bluetooth,
-#bluetooth.disabled,
-#bluetooth.off {
-  color: #e78284;
+#pulseaudio,
+#clock,
+#custom-omarchy {
+  min-width: 12px;
+  margin: 0 7.5px;
 }
 
-#bluetooth.on,
-#bluetooth.pairable,
-#bluetooth.discovering,
-#bluetooth.discoverable {
-  color: #8caaee;
+#custom-expand-icon {
+  margin-right: 7px;
 }
 
-#network.linked,
-#network.ethernet,
-#network.wifi,
-#bluetooth.connected {
-  color: #a6d189;
-}
-
-#battery {
-  color: #a6d189;
-}
-
-#battery.charging {
-  color: #a6d189;
-}
-
-#battery.warning:not(.charging) {
-  color: #e78284;
-}
-
-#backlight {
-  color: #e5c890;
-}
-
-#pulseaudio {
-  color: #ca9ee6;
-  margin-left: 1rem;
-}
-
-#custom-music {
-  color: #ca9ee6;
-  border-radius: 5px;
-}
-
-#custom-lock {
-  color: #babbf1;
-}
-
-#custom-power,
-#custom-power-rofi {
-  color: #e78284;
-  margin-right: 0.5rem;
-}
-
-#tray {
-  margin-right: 1rem;
-  margin-left: 1rem;
-  border-radius: 5px;
+tooltip {
+  padding: 2px;
 }

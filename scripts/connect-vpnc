@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 1 ]]; then
+  echo "Usage: $0 <profile-name>" >&2
+  exit 1
+fi
+
+profile="$1"
+conf="$HOME/.config/vpnc/${profile}.conf"
+
+if [[ ! -f $conf ]]; then
+  echo "Error: config file not found: $conf" >&2
+  exit 1
+fi
+
+# Backup current DNS configuration
+echo "💾 Backing up current DNS configuration..."
+sudo cp /etc/resolv.conf /etc/resolv.conf.backup-vpn
+
+echo "⏳ Starting vpnc with profile '$profile'..."
+sudo vpnc "$conf" --debug 3
+
+# VPNC should have updated DNS, but let's verify and optionally override
+echo "🔍 Current DNS configuration:"
+cat /etc/resolv.conf
+
+# Optional: Force specific DNS servers if needed
+# Uncomment and modify these lines if you want to override:
+# echo "🔧 Setting custom DNS servers..."
+# echo "nameserver 192.168.1.1" | sudo tee /etc/resolv.conf > /dev/null
+# echo "nameserver 8.8.8.8" | sudo tee -a /etc/resolv.conf > /dev/null
+# echo "search company.local" | sudo tee -a /etc/resolv.conf > /dev/null
+
+# Refresh DNS cache
+if command -v resolvconf >/dev/null; then
+  echo "🔄 Updating resolvconf..."
+  sudo resolvconf -u
+else
+  echo "🔄 Flushing systemd-resolved cache..."
+  sudo systemd-resolve --flush-caches || true
+fi
+
+echo "✅ VPNC is up with DNS configured."

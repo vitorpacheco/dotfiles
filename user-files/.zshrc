@@ -150,6 +150,7 @@ alias zshconfig="nvim ~/.zshrc"
 alias upzshconfig="source ~/.zshrc"
 alias nvimupd="cd ~/.config/nvim && git pull && cd -"
 alias awsume=". awsume"
+alias venv="source .venv/bin/activate"
 
 # binds...
 bindkey -s ^f "tmux-sessionizer\n"

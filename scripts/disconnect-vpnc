@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+echo "🔌 Stopping vpnc..."
+sudo vpnc-disconnect
+
+# Restore original DNS configuration
+if [[ -f /etc/resolv.conf.backup-vpn ]]; then
+  echo "🔄 Restoring original DNS configuration..."
+  sudo mv /etc/resolv.conf.backup-vpn /etc/resolv.conf
+fi
+
+# Refresh DNS
+if command -v resolvconf >/dev/null; then
+  echo "🔄 Updating resolvconf..."
+  sudo resolvconf -u
+else
+  echo "🔄 Flushing systemd-resolved cache..."
+  sudo systemd-resolve --flush-caches || true
+fi
+
+echo "✅ VPNC tunnel is down and DNS restored."

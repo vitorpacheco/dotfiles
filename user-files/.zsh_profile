@@ -15,6 +15,9 @@ export GIT_EDITOR=$VIM
 export DENO_INSTALL="$HOME/.deno"
 export BUN_INSTALL="$HOME/.bun"
 export PNPM_HOME="$HOME/.local/share/pnpm"
+export EDITOR="nvim"
+export SUDO_EDITOR="$EDITOR"
+export BAT_THEME=ansi
 
 addToPath() {
     if [[ "$PATH" != *"$1"* ]]; then
@@ -28,6 +31,7 @@ addToPathFront() {
     fi
 }
 
+addToPathFront $HOME/.local/share/omarchy/bin
 addToPathFront $HOME/.local/.npm-global/bin
 addToPathFront $HOME/.local/apps
 addToPathFront $HOME/.local/scripts

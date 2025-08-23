@@ -1,7 +1,7 @@
 [tools]
 bun = "1.2"
 deno = "2.3"
-dotnet = "9.0"
+dotnet = "latest"
 flyway = "11.8"
 go = "1.24"
 golangci-lint = "2.1"
@@ -21,4 +21,7 @@ php = "8.4"
 ruff = "latest"
 
 [settings]
-idiomatic_version_file_enable_tools = ["node"]
+idiomatic_version_file_enable_tools = ["node", "ruby"]
+
+[settings.ruby]
+ruby_build_opts = "CC=gcc-14 CXX=g++-14"

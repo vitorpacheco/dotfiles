@@ -20,69 +20,69 @@ DOTFILES_CONFIG_DIR="$DOTFILES_DIR/config-files"
 # List of files and directories directly in the home folder to backup
 # from your 'user-files' list
 USER_HOME_ITEMS=(
-    ".bash_profile"
-    ".bashrc"
-    ".codex"
-    ".gitconfig"
-    ".opencode.json"
-    ".profile"
-    ".tmux"
-    ".tmux.conf"
-    ".vimrc"
-    ".zsh_profile"
-    ".zshrc"
+  ".bash_profile"
+  ".bashrc"
+  ".codex"
+  ".gitconfig"
+  ".opencode.json"
+  ".profile"
+  ".tmux"
+  ".tmux.conf"
+  ".vimrc"
+  ".zsh_profile"
+  ".zshrc"
 )
 
 # List of directories within ~/.config to backup
 # from your 'config-files' list
 CONFIG_DIR_ITEMS=(
-    "bat"
-    "btop"
-    "Code"
-    "eza"
-    "fzf"
-    "ghostty"
-    "helix"
-    "homebrew"
-    "hypr"
-    "kbd"
-    "kitty"
-    "lazydocker"
-    "lazygit"
-    "mise"
-    "nwg-look"
-    "personal"
-    "rofi"
-    "swaync"
-    "tmux-sessionizer"
-    "Vial"
-    "waybar"
-    "wireplumber"
-    "wlogout"
+  "bat"
+  "btop"
+  "Code"
+  "eza"
+  "fzf"
+  "ghostty"
+  "helix"
+  "homebrew"
+  "hypr"
+  "kbd"
+  "kitty"
+  "lazydocker"
+  "lazygit"
+  "mise"
+  "nwg-look"
+  "personal"
+  "rofi"
+  "swaync"
+  "tmux-sessionizer"
+  "Vial"
+  "waybar"
+  "wireplumber"
+  "wlogout"
+  "vpnc"
 )
 
 # List of specific files within ~/.config to backup (user-dirs.dirs)
 CONFIG_FILES=(
-    "user-dirs.dirs"
+  "user-dirs.dirs"
 )
-
 
 # --- Utility Functions ---
 
-log_info () {
+log_info() {
   echo -e "${YELLOW}[INFO] $1${NC}"
 }
 
-log_success () {
+log_success() {
   echo -e "${GREEN}[SUCCESS] $1${NC}"
 }
 
-log_error () {
+log_error() {
   echo -e "${RED}[ERROR] $1${NC}"
 }
 
 # Function to copy a file or directory with overwrite confirmation
-copy_item () {
+copy_item() {
   local source_path="$1"
   local dest_path="$2"
   local item_name=$(basename "$source_path")
@@ -122,7 +122,7 @@ copy_item () {
   fi
 }
 
-load_git_submodules () {
+load_git_submodules() {
   log_info "Loading git submodules..."
 
   if git submodule update --init --recursive; then
@@ -132,7 +132,7 @@ load_git_submodules () {
   fi
 }
 
-clean_codex_config () {
+clean_codex_config() {
   local codex_config_path="$1"
   log_info "Cleaning Codex files in $codex_config_path..."
 
@@ -162,7 +162,7 @@ clean_codex_config () {
 }
 
 # Function to clean specific VS Code cache/temp files within its config folder
-clean_vscode_config () {
+clean_vscode_config() {
   local vscode_config_path="$1"
   log_info "Cleaning VS Code files in $vscode_config_path..."
 
@@ -232,7 +232,7 @@ clean_vscode_config () {
 # --- Backup Sections ---
 
 # 1. Backup user home files/directories
-backup_user_home_items () {
+backup_user_home_items() {
   log_info "Backing up items from $USER_HOME to $DOTFILES_USER_FILES_DIR..."
   mkdir -p "$DOTFILES_USER_FILES_DIR" # Ensure destination directory exists
 
@@ -247,7 +247,7 @@ backup_user_home_items () {
 }
 
 # 2. Backup ~/.config directories
-backup_config_directories () {
+backup_config_directories() {
   log_info "Backing up directories from $USER_HOME/.config to $DOTFILES_CONFIG_DIR..."
   mkdir -p "$DOTFILES_CONFIG_DIR" # Ensure destination directory exists
 
@@ -263,7 +263,7 @@ backup_config_directories () {
 }
 
 # 3. Backup specific ~/.config files
-backup_config_files () {
+backup_config_files() {
   log_info "Backing up specific files from $USER_HOME/.config to $DOTFILES_CONFIG_DIR..."
   mkdir -p "$DOTFILES_CONFIG_DIR" # Ensure destination directory exists
 
@@ -271,7 +271,6 @@ backup_config_files () {
     copy_item "$USER_HOME/.config/$item" "$DOTFILES_CONFIG_DIR/"
   done
 }
-
 
 # --- Main Logic ---
 
