@@ -3,8 +3,5 @@
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
     <mapping directory="$PROJECT_DIR$/config-files/nvim" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/user-files/.tmux/plugins/tmux" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/user-files/.tmux/plugins/tpm" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/user-files/.tmux/plugins/tpm/lib/tmux-test" vcs="Git" />
   </component>
 </project>
