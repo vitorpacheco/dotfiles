@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(pwd)"
+
+echo "▶ Root directory (destination): $ROOT_DIR"
+
+echo "▶ Deleting .mp3 files from subdirectories (not touching root)..."
+find . -mindepth 2 -type f -iname "*.mp3" -print -delete
+
+echo "▶ Moving .mp4, .jpg and .jpeg files to ROOT_DIR (auto-renaming on conflicts)..."
+find . -mindepth 2 -type f \( \
+  -iname "*.mp4" -o \
+  -iname "*.jpg" -o \
+  -iname "*.jpeg" \
+  \) -exec bash -c '
+    ROOT="$1"
+    shift
+
+    for f; do
+      base=$(basename "$f")
+      name="${base%.*}"
+      ext="${base##*.}"
+
+      dest="$ROOT/$base"
+      i=1
+      while [ -e "$dest" ]; do
+        dest="$ROOT/${name}_$i.$ext"
+        ((i++))
+      done
+
+      mv "$f" "$dest"
+    done
+  ' bash "$ROOT_DIR" {} +
+
+echo "✔ Files moved."
+
+echo "▶ Running rmlint..."
+rmlint -g "$ROOT_DIR"
+
+echo "▶ Running rmlint cleanup script..."
+"$ROOT_DIR/rmlint.sh" -dc
+rm "$ROOT_DIR/rmlint.json"
+
+echo "✔ Done."

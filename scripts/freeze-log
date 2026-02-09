@@ -1,0 +1,7 @@
+#!/bin/bash
+
+while true; do
+  echo "===== $(date '+%Y-%m-%d %H:%M:%S') =====" >> ~/freeze-log.txt
+  ps -eo pid,stat,comm,wchan:40 | awk '$2 ~ /D/ {print}' >> ~/freeze-log.txt
+  sleep 1
+done

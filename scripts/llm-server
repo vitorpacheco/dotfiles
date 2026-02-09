@@ -1,0 +1,136 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+LLAMA_SERVER="${LLAMA_SERVER:-$HOME/applications/llama.cpp/build/bin/llama-server}"
+
+# ----------------------------
+# Performance/parallelism knobs (defaults tuned for Ryzen 7 5700X)
+# Override via env:
+#   LLAMA_THREADS=8 LLAMA_THREADS_BATCH=12 LLAMA_THREADS_HTTP=4 LLAMA_PARALLEL=8 ./llm-server qwen
+# ----------------------------
+LLAMA_THREADS="${LLAMA_THREADS:-8}"
+LLAMA_THREADS_BATCH="${LLAMA_THREADS_BATCH:-12}"
+LLAMA_THREADS_HTTP="${LLAMA_THREADS_HTTP:-4}"
+LLAMA_PARALLEL="${LLAMA_PARALLEL:-8}"
+
+# ----------------------------
+# Modelo registry (adicione/remova aqui)
+# Cada modelo define:
+#   - ARGS: flags específicas do modelo/preset
+#   - DEFAULT_PORT: porta padrão
+# ----------------------------
+
+declare -A MODEL_ARGS=(
+  # Qwen2.5 Coder 7B GGUF local
+  [qwen]="
+    -m $HOME/models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
+    --chat-template chatml
+    --jinja
+    --ctx-size 4096
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn
+    --cache-type-k q8_0
+    --cache-type-v q8_0
+    --fit on
+    --fit-target 1536
+    --n-gpu-layers auto
+  "
+
+  # GPT-OSS 20B preset (baixa os pesos automaticamente)
+  [gpt-oss]="
+    --gpt-oss-20b-default
+    --ctx-size 4096
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn
+    --cache-type-k q8_0
+    --cache-type-v q8_0
+    --fit on
+    --fit-target 2048
+    --n-gpu-layers auto
+  "
+)
+
+declare -A MODEL_PORT=(
+  [qwen]=8080
+  [gpt-oss]=8081
+)
+
+usage() {
+  cat <<EOF
+Uso:
+  llm-server <qwen|gpt-oss> [--host 0.0.0.0] [--port N] [-- extra llama-server args...]
+
+Env overrides (5700X defaults):
+  LLAMA_THREADS=8
+  LLAMA_THREADS_BATCH=12
+  LLAMA_THREADS_HTTP=4
+  LLAMA_PARALLEL=8
+
+Exemplos:
+  llm-server qwen
+  LLAMA_PARALLEL=12 llm-server qwen
+  LLAMA_THREADS=10 LLAMA_THREADS_BATCH=16 llm-server qwen
+  llm-server qwen --port 8080
+  llm-server gpt-oss --host 0.0.0.0 --port 8081
+  llm-server qwen -- --log-verbosity 4
+EOF
+}
+
+if [[ $# -lt 1 ]]; then
+  usage
+  exit 1
+fi
+
+MODEL="$1"
+shift
+if [[ -z "${MODEL_ARGS[$MODEL]+x}" ]]; then
+  echo "Modelo inválido: $MODEL"
+  usage
+  exit 1
+fi
+
+HOST="0.0.0.0"
+PORT="${MODEL_PORT[$MODEL]}"
+
+# Parse args simples do script; tudo depois de "--" vai direto pro llama-server
+PASSTHRU=()
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --host)
+    HOST="$2"
+    shift 2
+    ;;
+  --port)
+    PORT="$2"
+    shift 2
+    ;;
+  --)
+    shift
+    PASSTHRU+=("$@")
+    break
+    ;;
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  *)
+    echo "Arg desconhecido: $1"
+    usage
+    exit 1
+    ;;
+  esac
+done
+
+# Monta comando final
+# shellcheck disable=SC2086
+exec "$LLAMA_SERVER" \
+  --host "$HOST" \
+  --port "$PORT" \
+  --threads "$LLAMA_THREADS" \
+  --threads-batch "$LLAMA_THREADS_BATCH" \
+  --threads-http "$LLAMA_THREADS_HTTP" \
+  --parallel "$LLAMA_PARALLEL" \
+  ${MODEL_ARGS[$MODEL]} \
+  "${PASSTHRU[@]}"
