@@ -1,0 +1,52 @@
+export PERSONAL=$XDG_CONFIG_HOME/personal
+
+export GOPATH=$HOME/.local/go
+export DENO_INSTALL="$HOME/.deno"
+export BUN_INSTALL="$HOME/.bun"
+export CARGO_INSTALL="$HOME/.cargo"
+export PNPM_HOME="$HOME/.local/share/pnpm"
+
+export EDITOR="nvim"
+export SUDO_EDITOR="$EDITOR"
+export GIT_EDITOR="$EDITOR"
+
+export BAT_THEME=ansi
+export CHROME_EXECUTABLE=/usr/bin/google-chrome-stable
+export ANDROID_SDK_ROOT="$HOME/Development/tools/android/sdk"
+export ANDROID_HOME="$ANDROID_SDK_ROOT"
+export FLUTTER_ROOT="$HOME/.local/share/mise/installs/flutter/3.35"
+export DART_SDK="$FLUTTER_ROOT/bin/cache/dart-sdk"
+export PNPM_HOME="$HOME/.local/share/pnpm"
+
+case ":$PATH:" in
+*":$PNPM_HOME:"*) ;;
+*) export PATH="$PNPM_HOME:$PATH" ;;
+esac
+
+export PATH=$PATH:$HOME/bin
+
+export PATH=$PATH:$HOME/go/bin
+export PATH=$PATH:$HOME/.pub-cache/bin
+export PATH=$PATH:$CARGO_INSTALL/bin
+export PATH=$PATH:$BUN_INSTALL/bin
+export PATH=$PATH:$DENO_INSTALL/bin
+
+export PATH=$PATH:$HOME/.local/bin
+export PATH=$PATH:$HOME/.local/apps
+export PATH=$PATH:$HOME/.local/scripts
+export PATH=$PATH:$HOME/.local/personal
+export PATH=$PATH:$HOME/.local/npm/bin
+export PATH=$PATH:$HOME/.local/go/bin
+export PATH=$PATH:$HOME/.local/.npm-global/bin
+export PATH=$PATH:$HOME/.local/share/nvim/mason/bin
+
+export PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools
+export PATH=$PATH:$ANDROID_SDK_ROOT/emulator
+export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin
+
+export PATH=$PATH:$HOME/.lmstudio/bin
+
+# Added by Toolbox App
+export PATH=$PATH:$HOME/.local/share/JetBrains/Toolbox/scripts
+
+. "$HOME/.cargo/env"

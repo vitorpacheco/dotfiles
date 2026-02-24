@@ -1,0 +1,38 @@
+
+# Set personal aliases, overriding those provided by Oh My Zsh libs,
+# plugins, and themes. Aliases can be placed here, though Oh My Zsh
+# users are encouraged to define aliases within a top-level file in
+# the $ZSH_CUSTOM folder, with .zsh extension. Examples:
+# - $ZSH_CUSTOM/aliases.zsh
+# - $ZSH_CUSTOM/macos.zsh
+# For a full list of active aliases, run `alias`.
+#
+# Example aliases
+# alias zshconfig="mate ~/.zshrc"
+# alias ohmyzsh="mate ~/.oh-my-zsh"
+
+# alias ls="eza --color=always --long --git --icons=always --no-time"
+# alias cd="z"
+
+alias zshconfig="nvim ~/.zshrc"
+alias ohmyzsh="nvim ~/.oh-my-zsh"
+alias upzshconfig="source ~/.zshrc"
+alias nvimupd="cd ~/.config/nvim && git pull && cd -"
+
+alias bc="bat"
+alias awsume=". awsume"
+alias pyvenv="source .venv/bin/activate"
+
+# alias code="code --disable-gpu"
+alias cxz="claude --settings ~/.claude/settings-z.json"
+
+alias d='docker'
+alias t='tmux attach || tmux new -s work'
+
+alias wtf3000="lsof -i tcp:3000"
+alias wtf5000="lsof -i tcp:5000"
+alias wtf8000="lsof -i tcp:8000"
+alias wtf8080="lsof -i tcp:8080"
+alias wtf9000="lsof -i tcp:9000"
+
+# vi: ft=zsh

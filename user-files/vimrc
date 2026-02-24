@@ -1,1 +1,5 @@
 set rtp+=/home/linuxbrew/.linuxbrew/opt/fzf
+
+" Relative line numbers
+set nu
+set rnu

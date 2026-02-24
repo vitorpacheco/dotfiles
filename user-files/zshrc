@@ -1,0 +1,2 @@
+source ~/.config/zsh/rc
+

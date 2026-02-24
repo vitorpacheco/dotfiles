@@ -1,0 +1,27 @@
+# Homebrew variables
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
+if command -v mise &> /dev/null; then
+  # eval "$(mise activate --shims)"
+  eval "$(mise activate zsh)"
+fi
+
+
+if [ -f ~/.profile ]; then
+  source ~/.profile
+fi
+
+addToPath() {
+    if [[ "$PATH" != *"$1"* ]]; then
+        export PATH=$PATH:$1
+    fi
+}
+
+addToPathFront() {
+    if [[ ! -z "$2" ]] || [[ "$PATH" != *"$1"* ]]; then
+        export PATH=$1:$PATH
+    fi
+}
+
+
+# vi: ft=zsh

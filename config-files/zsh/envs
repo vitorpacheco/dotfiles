@@ -1,0 +1,30 @@
+# Path to your Oh My Zsh installation.
+export ZSH="$HOME/.oh-my-zsh"
+
+# Homebrew (runs in both login and non-login shells)
+if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
+  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+fi
+
+if command -v brew &> /dev/null; then
+  export PATH="${PATH}:$(brew --prefix rustup 2>/dev/null)/bin"
+fi
+
+if command -v mise &> /dev/null; then
+  unset __MISE_DIFF __MISE_SESSION __MISE_ORIG_PATH
+  eval "$(mise activate zsh)"
+  # Move shims to front immediately so mise tools shadow homebrew from the start
+  if [[ -d "$HOME/.local/share/mise/shims" ]]; then
+    typeset -U PATH
+    export PATH="$HOME/.local/share/mise/shims:${PATH//:$HOME\/.local\/share\/mise\/shims/}"
+  fi
+  # Re-apply after each mise hook update (mise hook fires before each prompt)
+  _mise_ensure_shims_first() {
+    local shims="$HOME/.local/share/mise/shims"
+    [[ -d "$shims" && "$PATH" != "$shims:"* ]] || return
+    export PATH="${shims}:${PATH//:${shims}/}"
+  }
+  precmd_functions+=(_mise_ensure_shims_first)
+fi
+
+# vim: ft=zsh
