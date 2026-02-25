@@ -85,20 +85,58 @@ log_error () {
   echo -e "${RED}[ERROR] $1${NC}"
 }
 
+# Function to backup existing files/folders that are not symlinks
+backup_if_exists () {
+  local path="$1"
+  if [ -e "$path" ] && [ ! -L "$path" ]; then
+    local backup_path="$(dirname "$path")/_$(basename "$path").backup"
+    local counter=1
+    while [ -e "$backup_path" ]; do
+      backup_path="$(dirname "$path")/_$(basename "$path").backup.$counter"
+      counter=$((counter + 1))
+    done
+    mv "$path" "$backup_path"
+    log_info "Backed up existing file: $(basename "$path") -> $(basename "$backup_path")"
+  fi
+}
+
 # --- Installation Sections ---
+
+# 0. Update and install nvim submodule
+install_nvim_config () {
+  log_info "Updating nvim submodule..."
+  git submodule update --init --recursive config-files/nvim
+  
+  local nvim_source="$DOTFILES_DIR/config-files/nvim"
+  local nvim_dest="$CONFIG_DIR/nvim"
+  
+  if [ -e "$nvim_source" ]; then
+    if [ -L "$nvim_dest" ] && [ "$(readlink "$nvim_dest")" == "$nvim_source" ]; then
+      log_success "Nvim symlink already exists and is up to date"
+    else
+      backup_if_exists "$nvim_dest"
+      ln -s "$nvim_source" "$nvim_dest"
+      log_success "Created symlink for nvim config"
+    fi
+  else
+    log_error "Nvim config submodule not found at $nvim_source"
+  fi
+}
 
 # 1. Install config files
 install_config_files () {
   log_info "Installing config files to $CONFIG_DIR..."
   mkdir -p "$CONFIG_DIR"
   for file in "$DOTFILES_DIR/config-files"/*; do
-    if [ "$(basename "$file")" == "nvim" ]; then
-      continue # Skip nvim config for now
-    fi
-
     if [ -e "$file" ]; then
-      cp -r "$file" "$CONFIG_DIR/"
-      log_success "Copied $(basename "$file") to $CONFIG_DIR"
+      local dest="$CONFIG_DIR/$(basename "$file")"
+      if [ -L "$dest" ] && [ "$(readlink "$dest")" == "$file" ]; then
+        log_success "Symlink already exists: $(basename "$file")"
+      else
+        backup_if_exists "$dest"
+        ln -s "$file" "$dest"
+        log_success "Created symlink for $(basename "$file")"
+      fi
     else
       log_error "No files found in $DOTFILES_DIR/config-files"
     fi
@@ -122,8 +160,14 @@ install_user_config_files () {
     fi
 
     if [ -e "$file" ]; then
-      cp -r "$file" "$HOME/.$(basename "$file")"
-      log_success "Copied $(basename "$file") to $HOME"
+      local dest="$HOME/.$(basename "$file")"
+      if [ -L "$dest" ] && [ "$(readlink "$dest")" == "$file" ]; then
+        log_success "Symlink already exists: .$(basename "$file")"
+      else
+        backup_if_exists "$dest"
+        ln -s "$file" "$dest"
+        log_success "Created symlink for .$(basename "$file")"
+      fi
     else
       log_error "No files found in $DOTFILES_DIR/user-files"
     fi
@@ -199,15 +243,21 @@ install_packages () {
   done
 }
 
-# 8. Copy local scripts
+# 8. Symlink local scripts
 copy_local_scripts () {
-  log_info "Copying local scripts to $LOCAL_SCRIPTS_DIR..."
+  log_info "Symlinking local scripts to $LOCAL_SCRIPTS_DIR..."
   mkdir -p "$LOCAL_SCRIPTS_DIR"
   for script in "$DOTFILES_DIR/scripts"/*; do
     if [ -e "$script" ]; then
-      cp -r "$script" "$LOCAL_SCRIPTS_DIR/"
-      chmod +x "$LOCAL_SCRIPTS_DIR/$(basename "$script")" # Make them executable
-      log_success "Copied and made executable $(basename "$script") to $LOCAL_SCRIPTS_DIR"
+      local dest="$LOCAL_SCRIPTS_DIR/$(basename "$script")"
+      if [ -L "$dest" ] && [ "$(readlink "$dest")" == "$script" ]; then
+        log_success "Symlink already exists: $(basename "$script")"
+      else
+        backup_if_exists "$dest"
+        ln -s "$script" "$dest"
+        chmod +x "$dest"
+        log_success "Created symlink for $(basename "$script")"
+      fi
     else
       log_error "No files found in $DOTFILES_DIR/scripts"
     fi
@@ -309,6 +359,7 @@ fi
 
 # Execute sections based on flags
 if "$INSTALL_CONFIG"; then
+  install_nvim_config
   install_config_files
 fi
 
