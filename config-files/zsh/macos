@@ -1,0 +1,4 @@
+# macOS-specific configurations
+# This file is sourced only when running on macOS
+
+# vi: ft=zsh

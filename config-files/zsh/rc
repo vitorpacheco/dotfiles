@@ -9,7 +9,16 @@ set +h
 
 source ~/.config/zsh/envs
 source ~/.config/zsh/ohmyzsh
-source ~/.config/zsh/omarchy
+
+# OS-specific configurations
+if [[ "$OSTYPE" == "linux-gnu"* ]] && command -v lsb_release &> /dev/null && [[ $(lsb_release -is) == "Ubuntu" ]]; then
+  source ~/.config/zsh/ubuntu
+elif [[ "$OSTYPE" == "darwin"* ]]; then
+  source ~/.config/zsh/macos
+elif [[ -d ~/.local/share/omarchy ]]; then
+  source ~/.config/zsh/omarchy
+fi
+
 source ~/.config/zsh/init
 source ~/.config/zsh/aliases
 source ~/.config/zsh/functions

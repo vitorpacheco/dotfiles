@@ -122,7 +122,7 @@ install_user_config_files () {
     fi
 
     if [ -e "$file" ]; then
-      cp -r "$file" "$HOME/"
+      cp -r "$file" "$HOME/.$(basename "$file")"
       log_success "Copied $(basename "$file") to $HOME"
     else
       log_error "No files found in $DOTFILES_DIR/user-files"

@@ -25,14 +25,19 @@ alias pyvenv="source .venv/bin/activate"
 
 # alias code="code --disable-gpu"
 alias cxz="claude --settings ~/.claude/settings-z.json"
-
 alias d='docker'
 alias t='tmux attach || tmux new -s work'
 
-alias wtf3000="lsof -i tcp:3000"
-alias wtf5000="lsof -i tcp:5000"
-alias wtf8000="lsof -i tcp:8000"
-alias wtf8080="lsof -i tcp:8080"
-alias wtf9000="lsof -i tcp:9000"
+# WTF
+alias wtf3000="wtf 3000"
+alias wtf5000="wtf 5000"
+alias wtf8000="wtf 8000"
+alias wtf8080="wtf 8080"
+alias wtf9000="wtf 9000"
+
+# Directories
+alias ..='cd ..'
+alias ...='cd ../..'
+alias ....='cd ../../..'
 
 # vi: ft=zsh

@@ -2,4 +2,9 @@ bw_unlock() {
   export BW_SESSION=$(bw unlock --raw)
 }
 
+# WTF is running on port
+wtf () {
+  lsof -i tcp:$1
+}
+
 # vi: ft=zsh
