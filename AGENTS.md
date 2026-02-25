@@ -4,29 +4,51 @@ This repository manages personal dotfiles and system configuration for Linux (Ub
 
 ## Build/Test/Install Commands
 
-This is a dotfiles management repository with no formal build system. Use the main install script:
+This is a dotfiles management repository with no formal build system. Use the main install script or Makefile:
 
 ```bash
-# Show help
-./install --help
+# Using Makefile (recommended)
+make install-all          # Install everything (full profile)
+make install-minimal      # Install essential configs only
+make install-config       # Install config-files/ to ~/.config/
+make install-user         # Install user-files/ to ~/
+make check                # Verify installation health
+make restore              # Restore all backed up files
+make dry-run              # Preview changes without applying
+make update-nvim          # Update nvim submodule and commit reference
+make update-submodules    # Update all submodules
 
-# Install specific components (use one or more flags)
-./install --config          # Install config-files/ to ~/.config/
-./install --user-config     # Install user-files/ to ~/
-./install --packages        # Run package installation scripts
-./install --installers      # Run installer scripts
-./install --apps            # Run app installation scripts
-./install --local-scripts   # Copy scripts/ to ~/.local/scripts/
-./install --gnome           # Run GNOME-specific scripts (auto-detects DE)
-./install --icons           # Run icons/install.sh
-./install --utils="script.sh"  # Run specific utility from utils/
+# Using install script directly
+./install --help                    # Show all options
+./install --profile=minimal         # Minimal installation
+./install --profile=full            # Full installation
+./install --dry-run --config        # Preview config installation
+./install --check                   # Health check
+./install --restore                 # Restore backups
+./install --config --user-config    # Install specific components
+./install --verbose --config        # Verbose output
 
-# Full installation (typical workflow)
-./install --config --user-config --packages --installers --apps --local-scripts
-
-# Update git submodules (nvim, tmux plugins)
+# Update git submodules manually
 git submodule update --init --recursive
+git submodule update --remote config-files/nvim
 ```
+
+## Available Install Flags
+
+- `--config` - Install config-files/ to ~/.config/ (includes nvim)
+- `--user-config` - Install user-files/ to ~/
+- `--packages` - Run package installation scripts
+- `--installers` - Run installer scripts
+- `--apps` - Run app installation scripts
+- `--local-scripts` - Symlink scripts/ to ~/.local/scripts/
+- `--gnome` - Run GNOME-specific scripts (auto-detects DE)
+- `--icons` - Run icons/install.sh
+- `--utils="script.sh"` - Run specific utility from utils/
+- `--dry-run` - Preview changes without applying
+- `--verbose` - Enable verbose output
+- `--check` - Verify installation health
+- `--restore` - Restore backed up files
+- `--profile=minimal|full` - Use predefined installation profile
 
 ## Code Style Guidelines
 
@@ -103,13 +125,34 @@ bash scripts/test-script.sh
 bash -n packages/01-base-packages.sh
 
 # Run install with single component
-./install --config
+./install --dry-run --config
+
+# Check installation health
+./install --check
+
+# Preview all changes
+make dry-run
 ```
+
+## Backup and Restore
+
+The install script automatically backs up existing files before creating symlinks:
+- Backups are named: `_{filename}.backup`, `_{filename}.backup.1`, etc.
+- Located in the same directory as the original file
+- Restore with: `make restore` or `./install --restore`
+
+## Logging
+
+All installation actions are logged to `~/.dotfiles-install.log`:
+- View with: `cat ~/.dotfiles-install.log`
+- Includes timestamps and status messages
+- Useful for debugging installation issues
 
 ## Git Workflow
 
 - Only use git commands when explicitly requested by user
 - Submodules: nvim config, tmux plugins - run `git submodule update --init --recursive`
+- Update submodules with: `make update-nvim` or `make update-submodules`
 
 ## Important Notes
 
@@ -119,3 +162,6 @@ bash -n packages/01-base-packages.sh
 - Wayland/Hyprland oriented with extensive configs for waybar, rofi, swaync
 - `set +h` in zsh rc disables command hashing for mise compatibility
 - The `install` script is the main orchestrator - always use it for changes
+- Uses symlinks instead of copying files for easy updates
+- Pre-flight checks validate OS and essential dependencies before running
+- Dry-run mode (`--dry-run`) previews all changes without applying them

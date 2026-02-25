@@ -1,4 +1,4 @@
-.PHONY: help install install-all update-nvim update-submodules
+.PHONY: help install install-all install-config install-user update-nvim update-submodules check restore
 
 # Default target
 help:
@@ -9,8 +9,12 @@ help:
 	@echo "  make install-all     - Install everything (config, user-config, packages, installers, apps, scripts)"
 	@echo "  make install-config  - Install config files to ~/.config/"
 	@echo "  make install-user    - Install user config files to ~/"
+	@echo "  make install-minimal - Install minimal setup (config + user-config + scripts)"
+	@echo "  make check           - Check installation health"
+	@echo "  make restore         - Restore backed up files"
 	@echo "  make update-nvim     - Update nvim submodule to latest commit"
 	@echo "  make update-submodules - Update all git submodules"
+	@echo "  make dry-run         - Preview changes without applying"
 	@echo "  make help            - Show this help message"
 
 # Main install script
@@ -19,7 +23,11 @@ install:
 
 # Install everything
 install-all:
-	./install --config --user-config --packages --installers --apps --local-scripts
+	./install --profile=full
+
+# Install minimal setup
+install-minimal:
+	./install --profile=minimal
 
 # Install only config files (includes nvim submodule update)
 install-config:
@@ -29,18 +37,32 @@ install-config:
 install-user:
 	./install --user-config
 
+# Check installation health
+check:
+	./install --check
+
+# Restore backed up files
+restore:
+	./install --restore
+
+# Dry-run preview
+dry-run:
+	./install --dry-run --profile=full
+
 # Update nvim submodule to latest commit and commit the reference
 update-nvim:
 	@echo "Updating nvim submodule..."
 	git submodule update --remote config-files/nvim
 	git add config-files/nvim
-	git diff --cached --quiet || git commit -m "Update nvim submodule to latest commit"
-	@echo "Nvim submodule updated and committed"
+	@git diff --cached --quiet && echo "No changes to commit" || git commit -m "Update nvim submodule to latest commit"
+	@echo "Nvim submodule updated"
 
 # Update all submodules
 update-submodules:
 	@echo "Updating all git submodules..."
 	git submodule update --remote
-	git add .gitmodules
-	git submodule foreach 'git add -A && git diff --cached --quiet || git commit -m "Update submodule"'
+	@for submodule in $$(git submodule | awk '{print $$2}'); do \
+		git add "$$submodule" 2>/dev/null || true; \
+	done
+	@git diff --cached --quiet && echo "No changes to commit" || git commit -m "Update all submodules"
 	@echo "All submodules updated"
