@@ -5,7 +5,7 @@
 ZSH_THEME="robbyrussell"
 ZSH_TMUX_AUTOSTART=false
 
-eval "$(oh-my-posh init zsh --config $(brew --prefix oh-my-posh)/themes/spaceship.omp.json)"
+eval "$(oh-my-posh init zsh --config ~/.config/zsh/themes/spaceship-custom.omp.json)"
 
 # Set list of themes to pick from when loading at random
 # Setting this variable when ZSH_THEME=random will cause zsh to load
@@ -84,7 +84,7 @@ bindkey '^[[B' history-search-forward
 
 source $ZSH/oh-my-zsh.sh
 
-autoload -Uz compinit
+autoload -Uz compinit zmv
 compinit
 
 # User configuration

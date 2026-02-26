@@ -7,4 +7,30 @@ wtf () {
   lsof -i tcp:$1
 }
 
+# Compress using zip
+zzip() {
+  if [ -z "$1" ]; then
+    echo "Usage: z-zip <file>"
+    return 1
+  fi
+
+  # Remove trailing slash if it's a folder for cleaner naming
+  local target="${1%/}"
+  zip -r "${target}.zip" "$target"
+}
+
+uzip() {
+  if [[ ! "$1" == *.zip ]]; then
+    echo "Error: Please provide a zip file"
+    return 1
+  fi
+
+  # Get the filename without the .zip extension
+  local folder_name="${1%.zip}"
+
+  # Create the directory and unzip into it
+  mkdir -p "$folder_name"
+  unzip "$1" -d "$folder_name"
+}
+
 # vi: ft=zsh
