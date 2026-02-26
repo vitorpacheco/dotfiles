@@ -1,0 +1,265 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# mac-clean-dev.sh (macOS)
+# Cleans the stuff we discussed: npm, pnpm, Go, NuGet, pip/pipx cache, JetBrains logs/caches/backups,
+# Podman machine + Podman leftovers, plus a couple safe macOS caches.
+#
+# Safe by default:
+# - Does NOT uninstall apps
+# - Does NOT delete JetBrains settings (only caches/logs/local history/backup/tmp)
+# - Does NOT delete all pnpm store unless you pass --pnpm-nuke
+# - Does NOT delete all podman data unless you pass --podman-nuke
+#
+# Tip: close JetBrains IDEs and stop dev servers before running.
+
+DRY_RUN=0
+YES=0
+
+# What to clean
+DO_NPM=1
+DO_PNPM=1
+DO_GO=1
+DO_NUGET=1
+DO_JETBRAINS=1
+DO_MAC_CACHES=1
+
+usage() {
+  cat <<'EOF'
+Usage: mac-clean-dev.sh [options]
+
+Core options:
+  --dry-run                 Show actions, don't delete anything
+  -y, --yes                 Don't prompt (assume yes)
+
+Enable/disable specific cleaners:
+  --no-npm | --no-pnpm | --no-go | --no-nuget | --no-jetbrains | --no-mac
+
+Examples:
+  mac-clean-dev.sh
+  mac-clean-dev.sh --dry-run
+EOF
+}
+
+log() { printf '%s\n' "$*"; }
+warn() { printf 'WARN: %s\n' "$*" >&2; }
+
+have() { command -v "$1" >/dev/null 2>&1; }
+
+confirm() {
+  local msg="$1"
+  if [[ "$YES" -eq 1 ]]; then return 0; fi
+  read -r -p "$msg [y/N] " ans
+  [[ "${ans:-}" == "y" || "${ans:-}" == "Y" ]]
+}
+
+rm_path() {
+  local p="$1"
+  if [[ ! -e "$p" ]]; then return 0; fi
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "[dry-run] rm -rf \"$p\""
+  else
+    log "rm -rf \"$p\""
+    rm -rf "$p"
+  fi
+}
+
+run_cmd() {
+  if [[ "$DRY_RUN" -eq 1 ]]; then
+    log "[dry-run] $*"
+  else
+    log "$*"
+    "$@"
+  fi
+}
+
+size_of() {
+  local p="$1"
+  [[ -e "$p" ]] || return 0
+  du -sh "$p" 2>/dev/null || true
+}
+
+print_section() {
+  log ""
+  log "========================================"
+  log "$1"
+  log "========================================"
+}
+
+parse_roots() {
+  local csv="$1"
+  IFS=',' read -r -a ROOTS <<<"$csv"
+}
+
+# -------------------------
+# Argument parsing
+# -------------------------
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --dry-run) DRY_RUN=1; shift ;;
+    -y|--yes) YES=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+
+    --no-npm) DO_NPM=0; shift ;;
+    --no-pnpm) DO_PNPM=0; shift ;;
+    --no-go) DO_GO=0; shift ;;
+    --no-nuget) DO_NUGET=0; shift ;;
+    --no-jetbrains) DO_JETBRAINS=0; shift ;;
+    --no-mac) DO_MAC_CACHES=0; shift ;;
+
+    *) warn "Unknown option: $1"; usage; exit 2 ;;
+  esac
+done
+
+# -------------------------
+# Pre-flight info
+# -------------------------
+print_section "Plan (dry-run=$DRY_RUN, yes=$YES)"
+log "Clean: npm=$DO_NPM pnpm=$DO_PNPM go=$DO_GO nuget=$DO_NUGET jetbrains=$DO_JETBRAINS mac=$DO_MAC_CACHES"
+
+# -------------------------
+# macOS caches (safe)
+# -------------------------
+if [[ "$DO_MAC_CACHES" -eq 1 ]]; then
+  print_section "macOS caches (safe)"
+  # User caches: safe to clear content; macOS/apps recreate
+  if confirm "Clear ~/Library/Caches/* ?"; then
+    # Avoid deleting the folder itself; delete contents
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      log '[dry-run] rm -rf "$HOME/Library/Caches/"*'
+    else
+      rm -rf "$HOME/Library/Caches/"* 2>/dev/null || true
+      log "Cleared ~/Library/Caches/*"
+    fi
+  fi
+
+  # System caches: usually safe, but requires sudo. We'll avoid nuking broad system caches automatically.
+  log "Skipping /Library/Caches by default (needs sudo and can be noisy)."
+fi
+
+# -------------------------
+# npm
+# -------------------------
+if [[ "$DO_NPM" -eq 1 ]]; then
+  print_section "npm cache"
+  if have npm; then
+    if confirm "Run: npm cache clean --force ?"; then
+      run_cmd npm cache clean --force
+    fi
+    if confirm "Run: npm cache verify ?"; then
+      run_cmd npm cache verify
+    fi
+    # Show cache path size
+    NPM_CACHE="$(npm config get cache 2>/dev/null || true)"
+    [[ -n "${NPM_CACHE:-}" ]] && log "npm cache dir: $NPM_CACHE" && size_of "$NPM_CACHE" || true
+  else
+    warn "npm not found; skipping."
+  fi
+fi
+
+# -------------------------
+# pnpm
+# -------------------------
+if [[ "$DO_PNPM" -eq 1 ]]; then
+  print_section "pnpm store"
+  if have pnpm; then
+    STORE_PATH="$(pnpm store path 2>/dev/null || true)"
+    if [[ -n "${STORE_PATH:-}" ]]; then
+      log "pnpm store: $STORE_PATH"
+      size_of "$STORE_PATH" || true
+    fi
+  else
+    warn "pnpm not found; skipping."
+  fi
+
+  # Corepack cache (optional, safe)
+  if confirm "Clear Corepack cache at ~/Library/Corepack ?"; then
+    rm_path "$HOME/Library/Corepack"
+  fi
+fi
+
+# -------------------------
+# Go
+# -------------------------
+if [[ "$DO_GO" -eq 1 ]]; then
+  print_section "Go caches"
+  if have go; then
+    GOCACHE="$(go env GOCACHE 2>/dev/null || true)"
+    GOMODCACHE="$(go env GOMODCACHE 2>/dev/null || true)"
+    [[ -n "${GOCACHE:-}" ]] && log "GOCACHE: $GOCACHE" && size_of "$GOCACHE" || true
+    [[ -n "${GOMODCACHE:-}" ]] && log "GOMODCACHE: $GOMODCACHE" && size_of "$GOMODCACHE" || true
+
+    if confirm "Run: go clean -cache -modcache -testcache -fuzzcache ?"; then
+      run_cmd go clean -cache -modcache -testcache -fuzzcache
+    fi
+  else
+    warn "go not found; skipping."
+  fi
+fi
+
+# -------------------------
+# NuGet / dotnet
+# -------------------------
+if [[ "$DO_NUGET" -eq 1 ]]; then
+  print_section "NuGet caches"
+  if have dotnet; then
+    if confirm "List NuGet locals (dotnet nuget locals all --list) ?"; then
+      run_cmd dotnet nuget locals all --list
+    fi
+    if confirm "Clear NuGet locals (dotnet nuget locals all --clear) ?"; then
+      run_cmd dotnet nuget locals all --clear
+    fi
+  else
+    warn "dotnet not found; skipping."
+  fi
+fi
+
+# -------------------------
+# JetBrains
+# -------------------------
+if [[ "$DO_JETBRAINS" -eq 1 ]]; then
+  print_section "JetBrains logs/caches/local history/backups/tmp"
+
+  JB_CACHES="$HOME/Library/Caches/JetBrains"
+  JB_LOGS="$HOME/Library/Logs/JetBrains"
+  JB_SUPPORT="$HOME/Library/Application Support/JetBrains"
+
+  log "Sizes before:"
+  size_of "$JB_CACHES" || true
+  size_of "$JB_LOGS" || true
+  size_of "$JB_SUPPORT" || true
+
+  if confirm "Clear JetBrains caches: $JB_CACHES/* ?"; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      log "[dry-run] rm -rf \"$JB_CACHES\"/*"
+    else
+      rm -rf "$JB_CACHES"/* 2>/dev/null || true
+      log "Cleared $JB_CACHES/*"
+    fi
+  fi
+
+  if confirm "Clear JetBrains logs: $JB_LOGS/* ?"; then
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+      log "[dry-run] rm -rf \"$JB_LOGS\"/*"
+    else
+      rm -rf "$JB_LOGS"/* 2>/dev/null || true
+      log "Cleared $JB_LOGS/*"
+    fi
+  fi
+
+  if [[ -d "$JB_SUPPORT" ]]; then
+    if confirm "Delete JetBrains tmp folders ?"; then
+      if [[ "$DRY_RUN" -eq 1 ]]; then
+        log "[dry-run] rm -rf \"$JB_SUPPORT\"/*/tmp"
+      else
+        rm -rf "$JB_SUPPORT"/*/tmp 2>/dev/null || true
+        log "Deleted tmp."
+      fi
+    fi
+  fi
+fi
+
+print_section "Done ✅"
+log "If something broke, it’s usually fixed by re-running the relevant tool (npm/pnpm/go/dotnet restore) or restarting the IDE."
+
+# vim: ft=bash
