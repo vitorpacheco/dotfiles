@@ -3,12 +3,15 @@ export ZSH="$HOME/.oh-my-zsh"
 
 # Source .profile in non-login shells to get PATH and other env vars
 if [[ ! -o login ]] && [[ -f "$HOME/.profile" ]]; then
+  # shellcheck source=/dev/null
   source "$HOME/.profile"
 fi
 
 # Homebrew (runs in both login and non-login shells)
 if [[ -x /home/linuxbrew/.linuxbrew/bin/brew ]]; then
   eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+elif [[ -x /opt/homebrew/bin/brew ]]; then
+  eval "$(/opt/homebrew/bin/brew shellenv)"
 fi
 
 if command -v brew &> /dev/null; then

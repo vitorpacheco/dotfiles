@@ -23,6 +23,8 @@ case ":$PATH:" in
 *) export PATH="$PNPM_HOME:$PATH" ;;
 esac
 
+export PATH=$PATH:/usr/local/bin
+
 export PATH=$PATH:$HOME/bin
 
 export PATH=$PATH:$HOME/go/bin
@@ -30,6 +32,7 @@ export PATH=$PATH:$HOME/.pub-cache/bin
 export PATH=$PATH:$CARGO_INSTALL/bin
 export PATH=$PATH:$BUN_INSTALL/bin
 export PATH=$PATH:$DENO_INSTALL/bin
+export PATH=$PATH:$HOME/.dotnet/tools
 
 export PATH=$PATH:$HOME/.local/bin
 export PATH=$PATH:$HOME/.local/apps

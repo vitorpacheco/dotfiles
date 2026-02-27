@@ -1,5 +1,5 @@
 # Homebrew variables
-eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+# eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
 
 if command -v mise &> /dev/null; then
   # eval "$(mise activate --shims)"

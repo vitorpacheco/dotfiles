@@ -23,6 +23,11 @@ if command -v fzf &> /dev/null; then
 
 fi
 
+# rbenv setup
+if command rbenv &> /dev/null; then
+  eval "$(rbenv init - --no-rehash zsh)"
+fi
+
 ## Completion scripts setup. Remove the following line to uninstall
 if [ -f '~/config/.dart-cli-completion/zsh-config.zsh' ]; then . '~/config/.dart-cli-completion/zsh-config.zsh'; fi
 ## [/Completion]
