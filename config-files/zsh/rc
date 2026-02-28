@@ -15,7 +15,9 @@ if [[ "$OSTYPE" == "linux-gnu"* ]] && command -v lsb_release &> /dev/null && [[ 
   source ~/.config/zsh/ubuntu
 elif [[ "$OSTYPE" == "darwin"* ]]; then
   source ~/.config/zsh/macos
-elif [[ -d ~/.local/share/omarchy ]]; then
+fi
+
+if [[ -d ~/.local/share/omarchy ]]; then
   source ~/.config/zsh/omarchy
 fi
 
