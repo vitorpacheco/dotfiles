@@ -1,51 +1,100 @@
-#!/bin/bash
+#!/usr/bin/env bash
+#
+# Node.js installation and npm packages
+# Supports: All platforms (Linux, macOS)
+#
 
-eval "$(mise activate --shims)"
-eval "$(mise activate bash)"
+set -euo pipefail
 
-if ! command -v mise &>/dev/null; then
-  red "instale o mise antes de rodar este script"
-  exit 1
+# Source shared library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+# Check if mise is available
+if ! check_command mise; then
+	log_error "mise is not installed. Please run installers first."
+	exit 1
 fi
 
-green "[NODE] instalando o node"
-mise use -g node@latest
+# Initialize mise environment
+init_mise_env || {
+	log_error "Failed to initialize mise environment"
+	exit 1
+}
 
-# Atualiza o yarn
-if command -v corepack &>/dev/null; then
-  green "[NODE] atualizando o yarn via corepack"
-  corepack prepare yarn@stable --activate
+# Install Node.js
+log_info "Installing Node.js via mise..."
+if mise use -g node@latest; then
+	log_success "Node.js installed successfully"
+	log_info "Node version: $(node --version)"
 else
-  yellow "[NODE] corepack não encontrado, atualizando yarn via npm"
-  npm install -g yarn
+	log_error "Failed to install Node.js"
+	exit 1
 fi
 
-# Atualiza o pnpm
-if command -v corepack &>/dev/null; then
-  green "[NODE] atualizando o pnpm via corepack"
-  corepack prepare pnpm@latest --activate
+# Update npm
+log_info "Updating npm..."
+if npm install -g npm; then
+	log_success "npm updated to version: $(npm --version)"
 else
-  yellow "[NODE] corepack não encontrado, atualizando pnpm via npm"
-  npm install -g pnpm
+	log_warn "Failed to update npm"
 fi
 
+# Update package managers via corepack (preferred) or npm
+update_package_manager() {
+	local name="$1"
+	local prepare_cmd="$2"
+
+	if check_command corepack; then
+		log_info "Updating $name via corepack..."
+		if $prepare_cmd; then
+			log_success "$name updated via corepack"
+			return 0
+		fi
+	fi
+
+	log_info "Updating $name via npm..."
+	if npm install -g "$name"; then
+		log_success "$name updated via npm"
+		return 0
+	fi
+
+	log_error "Failed to update $name"
+	return 1
+}
+
+# Update Yarn
+update_package_manager "yarn" "corepack prepare yarn@stable --activate"
+
+# Update pnpm
+update_package_manager "pnpm" "corepack prepare pnpm@latest --activate"
+
+# Global npm packages to install
 NPM_PACKAGES=(
-  @anthropic-ai/claude-code
-  @openai/codex
-  skytrace
-  artillery
-  eas-cli
+	"@anthropic-ai/claude-code"
+	"@openai/codex"
+	"skytrace"
+	"artillery"
+	"eas-cli"
 )
 
-green "[NODE] atualizando o npm"
-npm install -g npm
+log_info "Installing global npm packages..."
 
 for pkg in "${NPM_PACKAGES[@]}"; do
-  if npm list -g --depth=0 "$pkg" &>/dev/null; then
-    yellow "[NODE] $pkg já está instalado"
-  else
-    green "[NODE] instalando $pkg"
-    npm i -g "$pkg"
-  fi
+	pkg_name=$(echo "$pkg" | awk -F'@' '{print $1}' | sed 's/^@//')
+
+	if npm list -g --depth=0 "$pkg_name" &>/dev/null || npm list -g --depth=0 "$pkg" &>/dev/null; then
+		log_warn "$pkg is already installed"
+	else
+		log_info "Installing $pkg..."
+		if npm install -g "$pkg"; then
+			log_success "Installed $pkg"
+		else
+			log_error "Failed to install $pkg"
+		fi
+	fi
 done
 
+log_info "Node.js environment setup complete!"
+
+# vi: ft=bash

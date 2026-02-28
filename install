@@ -1,21 +1,18 @@
 #!/usr/bin/env bash
-
+#
 # Dotfiles Installation Script
-# Supports: Ubuntu/Debian, Arch Linux
+# Supports: Ubuntu/Debian, Arch Linux, macOS
 # Features: dry-run, logging, pre-flight checks, restore, health check
+#
 
-# Define colors for better output
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[0;33m'
-BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+set -euo pipefail
 
-set -e
-shopt -s dotglob
+# Source shared library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/packages/lib.sh"
 
 # --- Variables ---
-DOTFILES_DIR="$(dirname "$(realpath "$0")")"
+DOTFILES_DIR="$SCRIPT_DIR"
 CONFIG_DIR="$HOME/.config"
 LOCAL_SCRIPTS_DIR="$HOME/.local/scripts"
 LOG_FILE="$HOME/.dotfiles-install.log"
@@ -24,48 +21,23 @@ CHECKSUM_FILE="$CONFIG_DIR/.dotfiles-checksums"
 # Initialize log file
 echo "=== Dotfiles Install Log - $(date) ===" > "$LOG_FILE"
 
-CURRENT_DIR="$(dirname "$0")"
-cd "$CURRENT_DIR"
+cd "$DOTFILES_DIR" || exit 1
 
 # --- Flags ---
 DRY_RUN=false
 VERBOSE=false
 PROFILE=""
 
-# --- Logging Functions ---
-log_to_file () {
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
-}
-
-log_info () {
-  echo -e "${YELLOW}[INFO] $1${NC}"
-  log_to_file "[INFO] $1"
-}
-
-log_success () {
-  echo -e "${GREEN}[SUCCESS] $1${NC}"
-  log_to_file "[SUCCESS] $1"
-}
-
-log_error () {
-  echo -e "${RED}[ERROR] $1${NC}"
-  log_to_file "[ERROR] $1"
-}
-
-log_verbose () {
-  if [ "$VERBOSE" = true ]; then
-    echo -e "${BLUE}[VERBOSE] $1${NC}"
-  fi
-  log_to_file "[VERBOSE] $1"
-}
-
 # --- Help Function ---
-show_help () {
-  echo -e "${GREEN}Usage: $(basename "$0") [OPTIONS]${NC}"
+show_help() {
   echo ""
-  echo "Installs dotfiles and config files to your system."
+  log_info "Dotfiles Installation Script"
   echo ""
-  echo -e "${YELLOW}Options:${NC}"
+  log_info "Usage: $(basename "$0") [OPTIONS]"
+  echo ""
+  log_info "Installs dotfiles and config files to your system."
+  echo ""
+  log_info "Options:"
   echo "  --help                       Show this help message and exit."
   echo "  --dry-run                    Preview changes without applying them."
   echo "  --verbose                    Enable verbose output."
@@ -73,180 +45,202 @@ show_help () {
   echo "  --check                      Verify installation health and report issues."
   echo "  --restore                    Restore all backed up files."
   echo ""
-  echo -e "${YELLOW}Individual Installation Steps (use one or more):${NC}"
+  log_info "Individual Installation Steps (use one or more):"
   echo "  --config             Install files from config-files/ to ~/.config/"
-  echo "  --user-config        Install files/dirs from user-files/ to ~/ (e.g., .bashrc, .tmux)"
-  echo "  --apps               Execute scripts in apps/ (e.g., install Spotify, Brave)"
-  echo "  --gnome              Execute scripts in gnome/ (only if GNOME desktop is detected)"
-  echo "  --icons              Execute icons/install.sh"
-  echo "  --installers         Execute scripts in installers/ (e.g., download & setup tools)"
-  echo "  --packages           Execute scripts in packages/ (e.g., install system packages)"
+  echo "  --user-config        Install files/dirs from user-files/ to ~/"
+  echo "  --installers         Execute scripts in installers/ (e.g., tmux, zsh, mise)"
+  echo "  --packages           Execute scripts in packages/ (e.g., system packages)"
+  echo "  --apps               Execute scripts in apps/ (e.g., Docker, Chrome)"
   echo "  --local-scripts      Symlink scripts from scripts/ to ~/.local/scripts/"
+  echo "  --gnome              Execute scripts in gnome/ (GNOME desktop settings - Linux only)"
+  echo "  --icons              Execute icons/install.sh (Linux only)"
   echo ""
-  echo -e "${YELLOW}Utility Scripts (from utils/):${NC}"
-  echo "  --utils=\"script1.sh,script2.sh\" Execute specific scripts from utils/ (comma-separated list)"
+  log_info "Utility Scripts (from utils/):"
+  echo "  --utils=\"script1.sh,script2.sh\" Execute specific utility scripts"
   echo ""
-  echo -e "${YELLOW}Profiles:${NC}"
+  log_info "Profiles:"
   echo "  --profile=minimal    Install only essential configs (zsh, git, tmux)"
   echo "  --profile=full       Install everything"
   echo ""
-  echo "Example:"
-  echo "  $(basename "$0") --dry-run --config        # Preview config installation"
-  echo "  $(basename "$0") --profile=minimal          # Minimal installation"
-  echo "  $(basename "$0") --check                    # Check installation health"
-  echo "  $(basename "$0") --restore                  # Restore backed up files"
+  log_info "Platform Support:"
+  echo "  - Linux (Ubuntu/Debian, Arch): Full support"
+  echo "  - macOS: Most features supported (installers, packages, apps)"
+  echo ""
+  log_info "Examples:"
+  echo "  ./install --dry-run --config        # Preview config installation"
+  echo "  ./install --profile=minimal       # Minimal installation"
+  echo "  ./install --profile=full          # Full installation"
+  echo "  ./install --check                 # Check installation health"
+  echo "  ./install --restore               # Restore backed up files"
   echo ""
 }
 
 # --- Pre-flight Checks ---
-run_preflight_checks () {
+run_preflight_checks() {
   log_info "Running pre-flight checks..."
-  
+
   local errors=0
-  
+  local warnings=0
+
   # Check OS
-  if [ -f /etc/os-release ]; then
-    source /etc/os-release
-    log_verbose "Detected OS: $NAME ($ID)"
-    if [[ "$ID" != "ubuntu" && "$ID" != "debian" && "$ID" != "arch" ]]; then
-      log_error "Unsupported OS: $ID. Only Ubuntu/Debian and Arch are supported."
-      errors=$((errors + 1))
-    fi
-  else
-    log_error "Cannot detect OS. /etc/os-release not found."
-    errors=$((errors + 1))
+  local os
+  if ! os=$(detect_os 2>/dev/null); then
+    log_warn "Unknown or unsupported OS detected"
+    log_info "Continuing anyway..."
+    os="unknown"
+    warnings=$((warnings + 1))
   fi
-  
+
+  log_info "Detected OS: $os"
+
+  case "$os" in
+    ubuntu|debian|arch|macos)
+      log_success "OS is supported: $os"
+      ;;
+    unknown)
+      log_warn "OS detection failed - some features may not work"
+      ;;
+    *)
+      log_warn "OS may not be fully supported: $os"
+      warnings=$((warnings + 1))
+      ;;
+  esac
+
   # Check essential commands
   local required_commands=("git" "bash" "ln")
   for cmd in "${required_commands[@]}"; do
-    if ! command -v "$cmd" >/dev/null 2>&1; then
+    if ! check_command "$cmd"; then
       log_error "Required command not found: $cmd"
       errors=$((errors + 1))
     else
-      log_verbose "Found required command: $cmd"
+      log_debug "Found required command: $cmd"
     fi
   done
-  
+
   # Check if in git repo
-  if [ ! -d "$DOTFILES_DIR/.git" ]; then
-    log_error "Not a git repository. Please run from the dotfiles directory."
-    errors=$((errors + 1))
+  if [[ ! -d "$DOTFILES_DIR/.git" ]]; then
+    log_warn "Not a git repository. Some features may not work."
+    warnings=$((warnings + 1))
   fi
-  
+
   # Check dotfiles directory structure
   for dir in "config-files" "user-files" "scripts"; do
-    if [ ! -d "$DOTFILES_DIR/$dir" ]; then
+    if [[ ! -d "$DOTFILES_DIR/$dir" ]]; then
       log_error "Required directory not found: $dir"
       errors=$((errors + 1))
     fi
   done
-  
-  if [ $errors -gt 0 ]; then
+
+  if [[ $errors -gt 0 ]]; then
     log_error "Pre-flight checks failed with $errors error(s). Please fix the issues above."
     exit 1
   fi
-  
-  log_success "Pre-flight checks passed"
+
+  if [[ $warnings -gt 0 ]]; then
+    log_warn "Pre-flight checks completed with $warnings warning(s)"
+  else
+    log_success "Pre-flight checks passed"
+  fi
 }
 
 # --- Check Installation Health ---
-check_installation_health () {
+check_installation_health() {
   log_info "Checking installation health..."
-  
+
   local issues=0
-  
+
   # Check all symlinks in ~/.config
-  if [ -d "$CONFIG_DIR" ]; then
+  if [[ -d "$CONFIG_DIR" ]]; then
     for item in "$CONFIG_DIR"/*; do
-      if [ -L "$item" ]; then
+      if [[ -L "$item" ]]; then
         local target
         target=$(readlink "$item")
-        if [ ! -e "$target" ]; then
+        if [[ ! -e "$target" ]]; then
           log_error "Broken symlink: $item -> $target"
           issues=$((issues + 1))
         else
-          log_verbose "Valid symlink: $item -> $target"
+          log_debug "Valid symlink: $item -> $target"
         fi
       fi
     done
   fi
-  
+
   # Check symlinks in home directory
   for item in "$HOME"/.[^.]*; do
-    if [ -L "$item" ]; then
+    if [[ -L "$item" ]]; then
       local target
       target=$(readlink "$item")
-      if [[ "$target" == "$DOTFILES_DIR"* ]] && [ ! -e "$target" ]; then
+      if [[ "$target" == "$DOTFILES_DIR"* ]] && [[ ! -e "$target" ]]; then
         log_error "Broken dotfile symlink: $item -> $target"
         issues=$((issues + 1))
       fi
     fi
   done
-  
+
   # Check local scripts
-  if [ -d "$LOCAL_SCRIPTS_DIR" ]; then
+  if [[ -d "$LOCAL_SCRIPTS_DIR" ]]; then
     for item in "$LOCAL_SCRIPTS_DIR"/*; do
-      if [ -L "$item" ]; then
+      if [[ -L "$item" ]]; then
         local target
         target=$(readlink "$item")
-        if [ ! -e "$target" ]; then
+        if [[ ! -e "$target" ]]; then
           log_error "Broken script symlink: $item -> $target"
           issues=$((issues + 1))
         fi
       fi
     done
   fi
-  
+
   # Check for manual modifications (if checksum file exists)
-  if [ -f "$CHECKSUM_FILE" ]; then
+  if [[ -f "$CHECKSUM_FILE" ]]; then
     log_info "Checking for manual modifications..."
     while IFS= read -r line; do
-      local file_path
-      local stored_checksum
+      local file_path stored_checksum
       file_path=$(echo "$line" | cut -d' ' -f2)
       stored_checksum=$(echo "$line" | cut -d' ' -f1)
-      
-      if [ -f "$file_path" ] && [ ! -L "$file_path" ]; then
+
+      if [[ -f "$file_path" ]] && [[ ! -L "$file_path" ]]; then
         local current_checksum
-        current_checksum=$(md5sum "$file_path" | cut -d' ' -f1)
-        if [ "$current_checksum" != "$stored_checksum" ]; then
+        if command -v md5sum >/dev/null 2>&1; then
+          current_checksum=$(md5sum "$file_path" | cut -d' ' -f1)
+        elif command -v md5 >/dev/null 2>&1; then
+          current_checksum=$(md5 -q "$file_path")
+        fi
+
+        if [[ "$current_checksum" != "$stored_checksum" ]]; then
           log_warn "Manual modification detected: $file_path"
         fi
       fi
     done < "$CHECKSUM_FILE"
   fi
-  
-  if [ $issues -eq 0 ]; then
+
+  if [[ $issues -eq 0 ]]; then
     log_success "Installation health check passed - no issues found"
   else
     log_error "Installation health check found $issues issue(s)"
   fi
-  
+
   return $issues
 }
 
 # --- Restore Backups ---
-restore_backups () {
+restore_backups() {
   log_info "Restoring backed up files..."
-  
+
   local restored=0
-  
+
   # Restore config backups
-  if [ -d "$CONFIG_DIR" ]; then
+  if [[ -d "$CONFIG_DIR" ]]; then
     for backup in "$CONFIG_DIR"/_*.backup*; do
-      if [ -e "$backup" ]; then
-        local original_name
+      if [[ -e "$backup" ]]; then
+        local original_name dest
         original_name=$(basename "$backup" | sed 's/^_//' | sed 's/\.backup.*$//')
-        local dest="$CONFIG_DIR/$original_name"
-        
-        if [ "$DRY_RUN" = true ]; then
+        dest="$CONFIG_DIR/$original_name"
+
+        if [[ "$DRY_RUN" == true ]]; then
           log_info "[DRY-RUN] Would restore: $backup -> $dest"
         else
-          # Remove symlink if exists
-          if [ -L "$dest" ]; then
-            rm "$dest"
-          fi
+          [[ -L "$dest" ]] && rm "$dest"
           mv "$backup" "$dest"
           log_success "Restored: $original_name"
           restored=$((restored + 1))
@@ -254,41 +248,37 @@ restore_backups () {
       fi
     done
   fi
-  
+
   # Restore home directory backups
   for backup in "$HOME"/._*.backup*; do
-    if [ -e "$backup" ]; then
-      local original_name
+    if [[ -e "$backup" ]]; then
+      local original_name dest
       original_name=$(basename "$backup" | sed 's/^\.//' | sed 's/_//' | sed 's/\.backup.*$//')
-      local dest="$HOME/.$original_name"
-      
-      if [ "$DRY_RUN" = true ]; then
+      dest="$HOME/.$original_name"
+
+      if [[ "$DRY_RUN" == true ]]; then
         log_info "[DRY-RUN] Would restore: $backup -> $dest"
       else
-        if [ -L "$dest" ]; then
-          rm "$dest"
-        fi
+        [[ -L "$dest" ]] && rm "$dest"
         mv "$backup" "$dest"
         log_success "Restored: .$original_name"
         restored=$((restored + 1))
-        fi
+      fi
     fi
   done
-  
+
   # Restore script backups
-  if [ -d "$LOCAL_SCRIPTS_DIR" ]; then
+  if [[ -d "$LOCAL_SCRIPTS_DIR" ]]; then
     for backup in "$LOCAL_SCRIPTS_DIR"/_*.backup*; do
-      if [ -e "$backup" ]; then
-        local original_name
+      if [[ -e "$backup" ]]; then
+        local original_name dest
         original_name=$(basename "$backup" | sed 's/^_//' | sed 's/\.backup.*$//')
-        local dest="$LOCAL_SCRIPTS_DIR/$original_name"
-        
-        if [ "$DRY_RUN" = true ]; then
+        dest="$LOCAL_SCRIPTS_DIR/$original_name"
+
+        if [[ "$DRY_RUN" == true ]]; then
           log_info "[DRY-RUN] Would restore: $backup -> $dest"
         else
-          if [ -L "$dest" ]; then
-            rm "$dest"
-          fi
+          [[ -L "$dest" ]] && rm "$dest"
           mv "$backup" "$dest"
           log_success "Restored script: $original_name"
           restored=$((restored + 1))
@@ -296,8 +286,8 @@ restore_backups () {
       fi
     done
   fi
-  
-  if [ $restored -eq 0 ]; then
+
+  if [[ $restored -eq 0 ]]; then
     log_info "No backups found to restore"
   else
     log_success "Restored $restored file(s)"
@@ -305,48 +295,39 @@ restore_backups () {
 }
 
 # --- Checksum Functions ---
-update_checksums () {
-  log_verbose "Updating checksums..."
+update_checksums() {
+  log_debug "Updating checksums..."
   mkdir -p "$CONFIG_DIR"
   > "$CHECKSUM_FILE"
-  
+
   # Calculate checksums for all config files
   for file in "$DOTFILES_DIR/config-files"/*; do
-    if [ -f "$file" ]; then
+    if [[ -f "$file" ]]; then
       local checksum
-      checksum=$(md5sum "$file" | cut -d' ' -f1)
+      if command -v md5sum >/dev/null 2>&1; then
+        checksum=$(md5sum "$file" | cut -d' ' -f1)
+      elif command -v md5 >/dev/null 2>&1; then
+        checksum=$(md5 -q "$file")
+      fi
       echo "$checksum $CONFIG_DIR/$(basename "$file")" >> "$CHECKSUM_FILE"
     fi
   done
-  
-  log_verbose "Checksums saved to $CHECKSUM_FILE"
+
+  log_debug "Checksums saved to $CHECKSUM_FILE"
 }
 
 # --- Utility Functions ---
-command_exists () {
-  command -v "$1" >/dev/null 2>&1
-}
-
-is_gnome () {
-  if [ -n "$DESKTOP_SESSION" ] && [[ "$DESKTOP_SESSION" == *"gnome"* ]]; then
-    return 0
-  elif [ -n "$XDG_CURRENT_DESKTOP" ] && [[ "$XDG_CURRENT_DESKTOP" == *"GNOME"* ]]; then
-    return 0
-  fi
-  return 1
-}
-
-backup_if_exists () {
+backup_if_exists() {
   local path="$1"
-  if [ -e "$path" ] && [ ! -L "$path" ]; then
+  if [[ -e "$path" ]] && [[ ! -L "$path" ]]; then
     local backup_path="$(dirname "$path")/_$(basename "$path").backup"
     local counter=1
-    while [ -e "$backup_path" ]; do
+    while [[ -e "$backup_path" ]]; do
       backup_path="$(dirname "$path")/_$(basename "$path").backup.$counter"
       counter=$((counter + 1))
     done
-    
-    if [ "$DRY_RUN" = true ]; then
+
+    if [[ "$DRY_RUN" == true ]]; then
       log_info "[DRY-RUN] Would backup: $(basename "$path") -> $(basename "$backup_path")"
     else
       mv "$path" "$backup_path"
@@ -355,18 +336,18 @@ backup_if_exists () {
   fi
 }
 
-create_symlink () {
+create_symlink() {
   local source="$1"
   local dest="$2"
-  
-  if [ "$DRY_RUN" = true ]; then
-    if [ -L "$dest" ] && [ "$(readlink "$dest")" == "$source" ]; then
+
+  if [[ "$DRY_RUN" == true ]]; then
+    if [[ -L "$dest" ]] && [[ "$(readlink "$dest")" == "$source" ]]; then
       log_info "[DRY-RUN] Symlink already exists: $(basename "$dest")"
     else
       log_info "[DRY-RUN] Would create symlink: $(basename "$dest") -> $source"
     fi
   else
-    if [ -L "$dest" ] && [ "$(readlink "$dest")" == "$source" ]; then
+    if [[ -L "$dest" ]] && [[ "$(readlink "$dest")" == "$source" ]]; then
       log_success "Symlink already exists: $(basename "$dest")"
     else
       backup_if_exists "$dest"
@@ -378,91 +359,115 @@ create_symlink () {
 
 # --- Installation Sections ---
 
-install_nvim_config () {
+install_nvim_config() {
   log_info "Updating nvim submodule..."
-  
-  if [ "$DRY_RUN" = false ]; then
-    git submodule update --init --recursive config-files/nvim
+
+  if [[ "$DRY_RUN" == false ]]; then
+    git submodule update --init --recursive config-files/nvim 2>/dev/null || log_warn "Failed to update nvim submodule"
   fi
-  
+
   local nvim_source="$DOTFILES_DIR/config-files/nvim"
   local nvim_dest="$CONFIG_DIR/nvim"
-  
-  if [ -e "$nvim_source" ]; then
+
+  if [[ -e "$nvim_source" ]]; then
     create_symlink "$nvim_source" "$nvim_dest"
   else
-    log_error "Nvim config submodule not found at $nvim_source"
+    log_warn "Nvim config submodule not found at $nvim_source"
   fi
 }
 
-install_config_files () {
+install_config_files() {
   log_info "Installing config files to $CONFIG_DIR..."
   mkdir -p "$CONFIG_DIR"
-  
+
   for file in "$DOTFILES_DIR/config-files"/*; do
-    if [ -e "$file" ]; then
+    if [[ -e "$file" ]]; then
       local dest="$CONFIG_DIR/$(basename "$file")"
       create_symlink "$file" "$dest"
-    else
-      log_error "No files found in $DOTFILES_DIR/config-files"
     fi
   done
 }
 
-install_user_config_files () {
+install_user_config_files() {
   log_info "Installing user config files to $HOME..."
-  
+
   for file in "$DOTFILES_DIR/user-files"/*; do
-    if [ "$(basename "$file")" == "." ] || [ "$(basename "$file")" == ".." ]; then
+    local basename_file
+    basename_file=$(basename "$file")
+
+    if [[ "$basename_file" == "." ]] || [[ "$basename_file" == ".." ]]; then
       continue
     fi
 
-    if [ "$(basename "$file")" == ".git" ]; then
+    if [[ "$basename_file" == ".git" ]] || [[ "$basename_file" == ".tmux" ]]; then
       continue
     fi
 
-    if [ "$(basename "$file")" == ".tmux" ]; then
-      continue
-    fi
-
-    if [ -e "$file" ]; then
-      local dest="$HOME/.$(basename "$file")"
+    if [[ -e "$file" ]]; then
+      local dest="$HOME/.$basename_file"
       create_symlink "$file" "$dest"
-    else
-      log_error "No files found in $DOTFILES_DIR/user-files"
     fi
   done
 }
 
-install_apps () {
+execute_installers() {
+  log_info "Executing installer scripts..."
+  for script in "$DOTFILES_DIR/installers"/*.sh; do
+    if [[ -f "$script" ]]; then
+      if [[ "$DRY_RUN" == true ]]; then
+        log_info "[DRY-RUN] Would execute: $(basename "$script")"
+      else
+        log_info "Executing $(basename "$script")..."
+        bash "$script" || log_error "Failed to execute $(basename "$script")"
+      fi
+    fi
+  done
+}
+
+install_packages() {
+  log_info "Executing package installation scripts..."
+  for script in "$DOTFILES_DIR/packages"/*.sh; do
+    if [[ -f "$script" ]]; then
+      if [[ "$DRY_RUN" == true ]]; then
+        log_info "[DRY-RUN] Would execute: $(basename "$script")"
+      else
+        log_info "Executing $(basename "$script")..."
+        bash "$script" || log_error "Failed to execute $(basename "$script")"
+      fi
+    fi
+  done
+}
+
+install_apps() {
   log_info "Executing app installation scripts..."
   for script in "$DOTFILES_DIR/apps"/*.sh; do
-    if [ -f "$script" ]; then
-      if [ "$DRY_RUN" = true ]; then
-        log_info "[DRY-RUN] Would execute: $script"
+    if [[ -f "$script" ]]; then
+      if [[ "$DRY_RUN" == true ]]; then
+        log_info "[DRY-RUN] Would execute: $(basename "$script")"
       else
-        log_info "Executing $script..."
-        bash "$script" || log_error "Failed to execute $script"
+        log_info "Executing $(basename "$script")..."
+        bash "$script" || log_error "Failed to execute $(basename "$script")"
       fi
-    else
-      log_error "No scripts found in $DOTFILES_DIR/apps"
     fi
   done
 }
 
-install_gnome_scripts () {
+install_gnome_scripts() {
+  if is_macos; then
+    log_info "GNOME scripts are Linux-only, skipping on macOS"
+    return 0
+  fi
+
   if is_gnome; then
     log_info "GNOME environment detected. Executing GNOME-specific scripts..."
     for script in "$DOTFILES_DIR/gnome"/*.sh; do
-      if [ -f "$script" ]; then
-        if [ "$DRY_RUN" = true ]; then
-          log_info "[DRY-RUN] Would execute: $script"
+      if [[ -f "$script" ]]; then
+        if [[ "$DRY_RUN" == true ]]; then
+          log_info "[DRY-RUN] Would execute: $(basename "$script")"
         else
-          log_info "Executing $script..."
-          bash "$script" || log_error "Failed to execute $script"
+          log_info "Executing $(basename "$script")..."
+          bash "$script" || log_error "Failed to execute $(basename "$script")"
         fi
-      else
-        log_error "No scripts found in $DOTFILES_DIR/gnome"
       fi
     done
   else
@@ -470,70 +475,41 @@ install_gnome_scripts () {
   fi
 }
 
-install_icons () {
+install_icons() {
+  if is_macos; then
+    log_info "Icon installation is Linux-only, skipping on macOS"
+    return 0
+  fi
+
   log_info "Executing icons installation script..."
-  if [ -f "$DOTFILES_DIR/icons/install.sh" ]; then
-    if [ "$DRY_RUN" = true ]; then
+  if [[ -f "$DOTFILES_DIR/icons/install.sh" ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
       log_info "[DRY-RUN] Would execute: icons/install.sh"
     else
       bash "$DOTFILES_DIR/icons/install.sh" || log_error "Failed to execute icons/install.sh"
     fi
   else
-    log_error "Icon installation script not found"
+    log_warn "Icon installation script not found"
   fi
 }
 
-execute_installers () {
-  log_info "Executing installer scripts..."
-  for script in "$DOTFILES_DIR/installers"/*.sh; do
-    if [ -f "$script" ]; then
-      if [ "$DRY_RUN" = true ]; then
-        log_info "[DRY-RUN] Would execute: $script"
-      else
-        log_info "Executing $script..."
-        bash "$script" || log_error "Failed to execute $script"
-      fi
-    else
-      log_error "No scripts found in $DOTFILES_DIR/installers"
-    fi
-  done
-}
-
-install_packages () {
-  log_info "Executing package installation scripts..."
-  for script in "$DOTFILES_DIR/packages"/*.sh; do
-    if [ -f "$script" ]; then
-      if [ "$DRY_RUN" = true ]; then
-        log_info "[DRY-RUN] Would execute: $script"
-      else
-        log_info "Executing $script..."
-        bash "$script" || log_error "Failed to execute $script"
-      fi
-    else
-      log_error "No scripts found in $DOTFILES_DIR/packages"
-    fi
-  done
-}
-
-copy_local_scripts () {
+copy_local_scripts() {
   log_info "Symlinking local scripts to $LOCAL_SCRIPTS_DIR..."
   mkdir -p "$LOCAL_SCRIPTS_DIR"
   for script in "$DOTFILES_DIR/scripts"/*; do
-    if [ -e "$script" ]; then
+    if [[ -e "$script" ]]; then
       local dest="$LOCAL_SCRIPTS_DIR/$(basename "$script")"
       create_symlink "$script" "$dest"
-      if [ "$DRY_RUN" = false ]; then
-        chmod +x "$dest"
+      if [[ "$DRY_RUN" == false ]]; then
+        chmod +x "$dest" 2>/dev/null || true
       fi
-    else
-      log_error "No files found in $DOTFILES_DIR/scripts"
     fi
   done
 }
 
-execute_utils () {
+execute_utils() {
   local scripts_to_execute="$1"
-  if [ -z "$scripts_to_execute" ]; then
+  if [[ -z "$scripts_to_execute" ]]; then
     log_info "No specific utility scripts requested."
     return
   fi
@@ -542,15 +518,15 @@ execute_utils () {
   IFS=',' read -ra ADDR <<< "$scripts_to_execute"
   for i in "${ADDR[@]}"; do
     local script_path="$DOTFILES_DIR/utils/$i"
-    if [ -f "$script_path" ]; then
-      if [ "$DRY_RUN" = true ]; then
-        log_info "[DRY-RUN] Would execute: $script_path"
+    if [[ -f "$script_path" ]]; then
+      if [[ "$DRY_RUN" == true ]]; then
+        log_info "[DRY-RUN] Would execute: $i"
       else
-        log_info "Executing $script_path..."
-        bash "$script_path" || log_error "Failed to execute $script_path"
+        log_info "Executing $i..."
+        bash "$script_path" || log_error "Failed to execute $i"
       fi
     else
-      log_error "Utility script not found: $script_path"
+      log_error "Utility script not found: $i"
     fi
   done
 }
@@ -575,64 +551,50 @@ for arg in "$@"; do
   case $arg in
     --help)
       SHOW_HELP=true
-      shift
       ;;
     --dry-run)
       DRY_RUN=true
       log_info "Dry-run mode enabled - no changes will be made"
-      shift
       ;;
     --verbose)
       VERBOSE=true
-      shift
+      export DEBUG=true
       ;;
     --check)
       CHECK_HEALTH=true
-      shift
       ;;
     --restore)
       RESTORE=true
-      shift
       ;;
     --profile=*)
       PROFILE="${arg#*=}"
-      shift
       ;;
     --config)
       INSTALL_CONFIG=true
-      shift
       ;;
     --user-config)
       INSTALL_USER_CONFIG=true
-      shift
       ;;
     --apps)
       INSTALL_APPS=true
-      shift
       ;;
     --gnome)
       INSTALL_GNOME=true
-      shift
       ;;
     --icons)
       INSTALL_ICONS=true
-      shift
       ;;
     --installers)
       INSTALL_INSTALLERS=true
-      shift
       ;;
     --packages)
       INSTALL_PACKAGES=true
-      shift
       ;;
     --local-scripts)
       INSTALL_LOCAL_SCRIPTS=true
-      shift
       ;;
     --utils=*)
       UTILITY_SCRIPTS="${arg#*=}"
-      shift
       ;;
     *)
       log_error "Unknown argument: $arg"
@@ -643,28 +605,28 @@ for arg in "$@"; do
 done
 
 # Handle special commands
-if [ "$SHOW_HELP" = true ]; then
+if [[ "$SHOW_HELP" == true ]]; then
   show_help
   exit 0
 fi
 
-if [ "$CHECK_HEALTH" = true ]; then
+if [[ "$CHECK_HEALTH" == true ]]; then
   check_installation_health
   exit $?
 fi
 
-if [ "$RESTORE" = true ]; then
+if [[ "$RESTORE" == true ]]; then
   restore_backups
   exit 0
 fi
 
 # Run pre-flight checks
-if [ "$DRY_RUN" = false ]; then
+if [[ "$DRY_RUN" == false ]]; then
   run_preflight_checks
 fi
 
 # Apply profiles if specified
-if [ -n "$PROFILE" ]; then
+if [[ -n "$PROFILE" ]]; then
   case $PROFILE in
     minimal)
       log_info "Using minimal profile"
@@ -676,8 +638,8 @@ if [ -n "$PROFILE" ]; then
       log_info "Using full profile"
       INSTALL_CONFIG=true
       INSTALL_USER_CONFIG=true
-      INSTALL_PACKAGES=true
       INSTALL_INSTALLERS=true
+      INSTALL_PACKAGES=true
       INSTALL_APPS=true
       INSTALL_LOCAL_SCRIPTS=true
       INSTALL_GNOME=true
@@ -691,47 +653,47 @@ if [ -n "$PROFILE" ]; then
 fi
 
 # Execute sections based on flags
-if [ "$INSTALL_CONFIG" = true ]; then
+if [[ "$INSTALL_CONFIG" == true ]]; then
   install_nvim_config
   install_config_files
 fi
 
-if [ "$INSTALL_USER_CONFIG" = true ]; then
+if [[ "$INSTALL_USER_CONFIG" == true ]]; then
   install_user_config_files
 fi
 
-if [ "$INSTALL_APPS" = true ]; then
-  install_apps
-fi
-
-if [ "$INSTALL_GNOME" = true ]; then
-  install_gnome_scripts
-fi
-
-if [ "$INSTALL_ICONS" = true ]; then
-  install_icons
-fi
-
-if [ "$INSTALL_INSTALLERS" = true ]; then
+if [[ "$INSTALL_INSTALLERS" == true ]]; then
   execute_installers
 fi
 
-if [ "$INSTALL_PACKAGES" = true ]; then
+if [[ "$INSTALL_PACKAGES" == true ]]; then
   install_packages
 fi
 
-if [ "$INSTALL_LOCAL_SCRIPTS" = true ]; then
+if [[ "$INSTALL_APPS" == true ]]; then
+  install_apps
+fi
+
+if [[ "$INSTALL_GNOME" == true ]]; then
+  install_gnome_scripts
+fi
+
+if [[ "$INSTALL_ICONS" == true ]]; then
+  install_icons
+fi
+
+if [[ "$INSTALL_LOCAL_SCRIPTS" == true ]]; then
   copy_local_scripts
 fi
 
 execute_utils "$UTILITY_SCRIPTS"
 
 # Update checksums after installation
-if [ "$DRY_RUN" = false ] && [ "$INSTALL_CONFIG" = true ]; then
+if [[ "$DRY_RUN" == false ]] && [[ "$INSTALL_CONFIG" == true ]]; then
   update_checksums
 fi
 
-shopt -u dotglob
-
 log_success "Dotfiles installation complete!"
 log_info "Log file saved to: $LOG_FILE"
+
+# vi: ft=bash

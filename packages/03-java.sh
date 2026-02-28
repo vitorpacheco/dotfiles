@@ -1,40 +1,88 @@
-#!/bin/bash
+#!/usr/bin/env bash
+#
+# Java development environment installation via mise
+# Supports: All platforms (Linux, macOS)
+#
 
-eval "$(mise activate --shims)"
-eval "$(mise activate bash)"
+set -euo pipefail
 
-if command -v java &>/dev/null; then
-  yellow "[JAVA] java já instalado"
-else
-  green "[JAVA] instalando o node"
-  mise use -g java@zulu-21
+# Source shared library
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/lib.sh"
+
+# Check if mise is available
+if ! check_command mise; then
+	log_error "mise is not installed. Please run installers first."
+	exit 1
 fi
 
-if command -v quarkus &>/dev/null; then
-  yellow "[JAVA] quarkus já instalado"
+# Initialize mise environment
+init_mise_env || {
+	log_error "Failed to initialize mise environment"
+	exit 1
+}
+
+# Install Java
+log_info "Installing Java (Zulu 21) via mise..."
+if check_command java; then
+	log_warn "Java is already installed: $(java -version 2>&1 | head -n1)"
 else
-  green "[JAVA] instalando o quarkus"
-  mise use -g quarkus
+	if mise use -g java@zulu-21; then
+		log_success "Java installed successfully"
+	else
+		log_error "Failed to install Java"
+		exit 1
+	fi
 fi
 
-if command -v mvn &>/dev/null; then
-  yellow "[JAVA] maven já instalado"
+# Install Maven
+log_info "Installing Maven via mise..."
+if check_command mvn; then
+	log_warn "Maven is already installed: $(mvn -version | head -n1)"
 else
-  green "[JAVA] instalando o maven"
-  mise use -g maven
+	if mise use -g maven; then
+		log_success "Maven installed successfully"
+	else
+		log_error "Failed to install Maven"
+	fi
 fi
 
-if command -v gradle &>/dev/null; then
-  yellow "[JAVA] gradle já instalado"
+# Install Gradle
+log_info "Installing Gradle via mise..."
+if check_command gradle; then
+	log_warn "Gradle is already installed: $(gradle --version | head -n2 | tail -n1)"
 else
-  green "[JAVA] instalando o gradle"
-  mise use -g gradle
+	if mise use -g gradle; then
+		log_success "Gradle installed successfully"
+	else
+		log_error "Failed to install Gradle"
+	fi
 fi
 
-if command -v spring &>/dev/null; then
-  yellow "[JAVA] spring-boot já instalado"
+# Install Quarkus CLI
+log_info "Installing Quarkus CLI via mise..."
+if check_command quarkus; then
+	log_warn "Quarkus is already installed: $(quarkus --version)"
 else
-  green "[JAVA] instalando o spring-boot"
-  mise use -g spring-boot
+	if mise use -g quarkus; then
+		log_success "Quarkus installed successfully"
+	else
+		log_error "Failed to install Quarkus"
+	fi
 fi
 
+# Install Spring Boot CLI
+log_info "Installing Spring Boot CLI via mise..."
+if check_command spring; then
+	log_warn "Spring Boot is already installed: $(spring --version 2>&1 | head -n1)"
+else
+	if mise use -g spring-boot; then
+		log_success "Spring Boot installed successfully"
+	else
+		log_error "Failed to install Spring Boot"
+	fi
+fi
+
+log_info "Java development environment setup complete!"
+
+# vi: ft=bash

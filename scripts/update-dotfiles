@@ -1,0 +1,64 @@
+#!/usr/bin/env bash
+#
+# Dotfiles Update Script
+# Pulls latest changes, updates submodules, and runs health check
+#
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/packages/lib.sh"
+
+DOTFILES_DIR="$SCRIPT_DIR"
+
+cd "$DOTFILES_DIR" || exit 1
+
+log_info "Updating dotfiles repository..."
+
+# Check if we're in a git repository
+if [[ ! -d "$DOTFILES_DIR/.git" ]]; then
+  log_error "Not a git repository"
+  exit 1
+fi
+
+# Check for uncommitted changes
+if [[ -n $(git status --porcelain 2>/dev/null) ]]; then
+  log_warn "You have uncommitted changes in the dotfiles repository"
+  log_info "Please commit or stash them before updating"
+  
+  read -rp "Continue anyway? (y/N): " response
+  if [[ ! "$response" =~ ^[Yy]$ ]]; then
+    log_info "Update cancelled"
+    exit 0
+  fi
+fi
+
+# Pull latest changes
+log_info "Pulling latest changes from origin..."
+if git pull origin main 2>/dev/null || git pull origin master 2>/dev/null; then
+  log_success "Latest changes pulled"
+else
+  log_warn "Failed to pull changes. You may be offline or the remote is unavailable."
+fi
+
+# Update submodules
+log_info "Updating git submodules..."
+if git submodule update --init --recursive; then
+  log_success "Submodules updated"
+else
+  log_warn "Some submodules may not have updated"
+fi
+
+# Run health check
+log_info "Running installation health check..."
+if bash "$DOTFILES_DIR/install" --check; then
+  log_success "Health check passed"
+else
+  log_warn "Health check found issues. Run with --verbose for details."
+fi
+
+log_success "Dotfiles update complete!"
+log_info "Review changes with: git status"
+log_info "Run health check: ./install --check"
+
+# vi: ft=bash

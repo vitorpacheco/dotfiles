@@ -1,1 +1,0 @@
-- Only use git commands when explicitly requested
