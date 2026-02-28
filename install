@@ -54,6 +54,7 @@ show_help() {
   echo "  --local-scripts      Symlink scripts from scripts/ to ~/.local/scripts/"
   echo "  --gnome              Execute scripts in gnome/ (GNOME desktop settings - Linux only)"
   echo "  --icons              Execute icons/install.sh (Linux only)"
+  echo "  --omarchy-overrides  Install Omarchy-specific overrides only (tmux, hyprland)"
   echo ""
   log_info "Utility Scripts (from utils/):"
   echo "  --utils=\"script1.sh,script2.sh\" Execute specific utility scripts"
@@ -61,6 +62,7 @@ show_help() {
   log_info "Profiles:"
   echo "  --profile=minimal    Install only essential configs (zsh, git, tmux)"
   echo "  --profile=full       Install everything"
+  echo "  --profile=omarchy    Install Omarchy overrides only (tmux, hyprland)"
   echo ""
   log_info "Platform Support:"
   echo "  - Linux (Ubuntu/Debian, Arch): Full support"
@@ -507,6 +509,83 @@ copy_local_scripts() {
   done
 }
 
+install_omarchy_overrides() {
+  if ! is_omarchy; then
+    log_warn "Omarchy system not detected. Skipping Omarchy overrides."
+    return 0
+  fi
+
+  log_info "Installing Omarchy overrides..."
+
+  # Install tmux overrides
+  local tmux_override_source="$DOTFILES_DIR/config-files/tmux/omarchy-overrides.conf"
+  local tmux_override_dest="$CONFIG_DIR/tmux/omarchy-overrides.conf"
+  local tmux_system_conf="$CONFIG_DIR/tmux/tmux.conf"
+
+  if [[ -f "$tmux_override_source" ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
+      log_info "[DRY-RUN] Would create symlink: omarchy-overrides.conf"
+    else
+      create_symlink "$tmux_override_source" "$tmux_override_dest"
+    fi
+    
+    # Add source line to system tmux.conf
+    if [[ -f "$tmux_system_conf" ]]; then
+      local tmux_source_line='# Source Omarchy overrides
+if-shell "[ -f ~/.config/tmux/omarchy-overrides.conf ]" "source-file ~/.config/tmux/omarchy-overrides.conf"'
+      
+      if ! grep -q "omarchy-overrides.conf" "$tmux_system_conf" 2>/dev/null; then
+        if [[ "$DRY_RUN" == true ]]; then
+          log_info "[DRY-RUN] Would add source line to $tmux_system_conf"
+        else
+          echo "" >> "$tmux_system_conf"
+          echo "$tmux_source_line" >> "$tmux_system_conf"
+          log_success "Added source line to tmux.conf"
+        fi
+      else
+        log_info "Source line already present in tmux.conf"
+      fi
+    fi
+  else
+    log_warn "tmux overrides file not found"
+  fi
+
+  # Install hyprland overrides
+  local hypr_override_source="$DOTFILES_DIR/config-files/hypr/omarchy-overrides.conf"
+  local hypr_override_dest="$CONFIG_DIR/hypr/omarchy-overrides.conf"
+  local hypr_system_conf="$CONFIG_DIR/hypr/hyprland.conf"
+
+  if [[ -f "$hypr_override_source" ]]; then
+    if [[ "$DRY_RUN" == true ]]; then
+      log_info "[DRY-RUN] Would create symlink: omarchy-overrides.conf"
+    else
+      create_symlink "$hypr_override_source" "$hypr_override_dest"
+    fi
+    
+    # Add source line to system hyprland.conf
+    if [[ -f "$hypr_system_conf" ]]; then
+      local hypr_source_line='# Source Omarchy overrides
+source = ./omarchy-overrides.conf'
+      
+      if ! grep -q "omarchy-overrides.conf" "$hypr_system_conf" 2>/dev/null; then
+        if [[ "$DRY_RUN" == true ]]; then
+          log_info "[DRY-RUN] Would add source line to $hypr_system_conf"
+        else
+          echo "" >> "$hypr_system_conf"
+          echo "$hypr_source_line" >> "$hypr_system_conf"
+          log_success "Added source line to hyprland.conf"
+        fi
+      else
+        log_info "Source line already present in hyprland.conf"
+      fi
+    fi
+  else
+    log_warn "hyprland overrides file not found"
+  fi
+
+  log_success "Omarchy overrides installation complete"
+}
+
 execute_utils() {
   local scripts_to_execute="$1"
   if [[ -z "$scripts_to_execute" ]]; then
@@ -533,6 +612,11 @@ execute_utils() {
 
 # --- Main Logic ---
 
+# Check if running on Omarchy
+is_omarchy() {
+  [[ -d "$HOME/.local/share/omarchy" ]] || [[ -f "/etc/omarchy-release" ]]
+}
+
 # Parse command line arguments
 INSTALL_CONFIG=false
 INSTALL_USER_CONFIG=false
@@ -542,6 +626,7 @@ INSTALL_ICONS=false
 INSTALL_INSTALLERS=false
 INSTALL_PACKAGES=false
 INSTALL_LOCAL_SCRIPTS=false
+INSTALL_OMARCHY_OVERRIDES=false
 CHECK_HEALTH=false
 RESTORE=false
 UTILITY_SCRIPTS=""
@@ -592,6 +677,9 @@ for arg in "$@"; do
       ;;
     --local-scripts)
       INSTALL_LOCAL_SCRIPTS=true
+      ;;
+    --omarchy-overrides)
+      INSTALL_OMARCHY_OVERRIDES=true
       ;;
     --utils=*)
       UTILITY_SCRIPTS="${arg#*=}"
@@ -645,6 +733,11 @@ if [[ -n "$PROFILE" ]]; then
       INSTALL_GNOME=true
       INSTALL_ICONS=true
       ;;
+    omarchy)
+      log_info "Using omarchy profile - installing overrides only"
+      INSTALL_OMARCHY_OVERRIDES=true
+      INSTALL_LOCAL_SCRIPTS=true
+      ;;
     *)
       log_error "Unknown profile: $PROFILE. Use 'minimal' or 'full'"
       exit 1
@@ -684,6 +777,10 @@ fi
 
 if [[ "$INSTALL_LOCAL_SCRIPTS" == true ]]; then
   copy_local_scripts
+fi
+
+if [[ "$INSTALL_OMARCHY_OVERRIDES" == true ]]; then
+  install_omarchy_overrides
 fi
 
 execute_utils "$UTILITY_SCRIPTS"

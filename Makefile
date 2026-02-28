@@ -1,4 +1,4 @@
-.PHONY: help install install-all install-minimal install-config install-user install-installers install-packages install-apps install-local-scripts update-dotfiles update-nvim update-submodules check restore clean validate
+.PHONY: help install install-all install-minimal install-omarchy install-config install-user install-installers install-packages install-apps install-local-scripts update-dotfiles update-nvim update-submodules check restore clean validate
 
 # Colors for output
 BLUE := \033[0;34m
@@ -14,6 +14,7 @@ help:
 	@echo "$(GREEN)Setup Commands:$(NC)"
 	@echo "  make install-all       - Install everything (full profile)"
 	@echo "  make install-minimal   - Install minimal setup"
+	@echo "  make install-omarchy   - Install Omarchy overrides only (tmux, hyprland)"
 	@echo "  make install-config    - Install config files to ~/.config/"
 	@echo "  make install-user      - Install user config files to ~/"
 	@echo "  make install-installers- Run installer scripts (tmux, zsh, mise, homebrew)"
@@ -50,6 +51,11 @@ install-all:
 install-minimal:
 	@echo "$(BLUE)[INFO]$(NC) Running minimal installation..."
 	@./install --profile=minimal
+
+# Install Omarchy overrides only
+install-omarchy:
+	@echo "$(BLUE)[INFO]$(NC) Installing Omarchy overrides..."
+	@./install --profile=omarchy
 
 # Install only config files (includes nvim submodule update)
 install-config:
