@@ -1,12 +1,22 @@
 #!/usr/bin/env bash
+#
+# Automated Dev Commit Script
+# 
+# Description: Automatically commits and pushes changes to nvim-config and dotfiles repos.
+#              Useful for quick sync of development environment changes.
+# 
+# Usage: dev-commit
+# 
+# Note: Hardcoded paths for ~/Development/personal/
+#
 
-pushd ~/personal/nvim
+pushd ~/Development/personal/nvim-config
 git add .
 git commit -m 'automated dev commit'
 git push
 popd
 
-pushd ~/personal/dotfiles
+pushd ~/Development/personal/dotfiles
 git add .
 git commit -m 'automated dev commit'
 git push

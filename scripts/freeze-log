@@ -1,4 +1,14 @@
-#!/bin/bash
+#!/usr/bin/env bash
+#
+# System Freeze Monitor
+# 
+# Description: Continuously monitors for processes in uninterruptible sleep state (D state)
+#              and logs them to ~/freeze-log.txt. Useful for debugging system freezes.
+# 
+# Usage: freeze-log (runs indefinitely, use Ctrl+C to stop)
+# 
+# Output: ~/freeze-log.txt
+#
 
 while true; do
   echo "===== $(date '+%Y-%m-%d %H:%M:%S') =====" >> ~/freeze-log.txt

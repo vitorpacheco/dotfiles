@@ -1,4 +1,15 @@
 #!/usr/bin/env bash
+#
+# VPNC Disconnection Script
+# 
+# Description: Disconnects vpnc VPN and restores original DNS configuration.
+#              Should be used after connect-vpnc to properly clean up.
+# 
+# Usage: disconnect-vpnc
+# 
+# Requirements: vpnc, sudo access
+#
+
 set -euo pipefail
 
 echo "🔌 Stopping vpnc..."

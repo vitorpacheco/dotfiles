@@ -147,17 +147,24 @@ install_icons() {
 }
 
 copy_local_scripts() {
-	log_info "Symlinking local scripts to $LOCAL_SCRIPTS_DIR..."
-	mkdir -p "$LOCAL_SCRIPTS_DIR"
-	for script in "$DOTFILES_DIR/scripts"/*; do
-		if [[ -e "$script" ]]; then
-			local dest="$LOCAL_SCRIPTS_DIR/$(basename "$script")"
-			create_symlink "$script" "$dest"
-			if [[ "$DRY_RUN" == false ]]; then
-				chmod +x "$dest" 2>/dev/null || true
-			fi
+	log_info "Symlinking scripts directory to $LOCAL_SCRIPTS_DIR..."
+
+	# Create parent directory only
+	mkdir -p "$(dirname "$LOCAL_SCRIPTS_DIR")"
+
+	# Handle existing directory or symlink
+	if [[ -d "$LOCAL_SCRIPTS_DIR" ]] && [[ ! -L "$LOCAL_SCRIPTS_DIR" ]]; then
+		# It's a real directory - backup it
+		backup_if_exists "$LOCAL_SCRIPTS_DIR"
+	elif [[ -L "$LOCAL_SCRIPTS_DIR" ]]; then
+		# It's a symlink - remove it (will be replaced)
+		if [[ "$DRY_RUN" == false ]]; then
+			rm "$LOCAL_SCRIPTS_DIR"
 		fi
-	done
+	fi
+
+	# Create symlink to the entire scripts directory
+	create_symlink "$DOTFILES_DIR/scripts" "$LOCAL_SCRIPTS_DIR"
 }
 
 # --- Special Installations ---
@@ -237,6 +244,52 @@ source = ./omarchy-overrides.conf'
 	fi
 
 	log_success "Omarchy overrides installation complete"
+}
+
+install_hyprland_plugins() {
+	if ! is_hyprland; then
+		log_info "Hyprland not detected, skipping Hyprland plugins installation"
+		return 0
+	fi
+
+	if ! command -v hyprpm >/dev/null 2>&1; then
+		log_warn "hyprpm not found, skipping Hyprland plugins installation"
+		return 0
+	fi
+
+	log_info "Installing Hyprland plugins via hyprpm..."
+
+	if [[ "$DRY_RUN" == true ]]; then
+		log_info "[DRY-RUN] Would add hyprland-plugins repository"
+		log_info "[DRY-RUN] Would enable csgo-vulkan-fix plugin"
+		return 0
+	fi
+
+	# Add the hyprland-plugins repository if not already added
+	if ! hyprpm list | grep -q "hyprland-plugins"; then
+		log_info "Adding hyprland-plugins repository..."
+		hyprpm add https://github.com/hyprwm/hyprland-plugins || {
+			log_error "Failed to add hyprland-plugins repository"
+			return 1
+		}
+		log_success "Added hyprland-plugins repository"
+	else
+		log_info "hyprland-plugins repository already added"
+	fi
+
+	# Enable the csgo-vulkan-fix plugin if not already enabled
+	if ! hyprpm list | grep -q "csgo-vulkan-fix"; then
+		log_info "Enabling csgo-vulkan-fix plugin..."
+		hyprpm enable csgo-vulkan-fix || {
+			log_error "Failed to enable csgo-vulkan-fix plugin"
+			return 1
+		}
+		log_success "Enabled csgo-vulkan-fix plugin"
+	else
+		log_info "csgo-vulkan-fix plugin already enabled"
+	fi
+
+	log_success "Hyprland plugins installation complete"
 }
 
 execute_utils() {

@@ -191,6 +191,9 @@ run_installation() {
 
 	execute_utils "$UTILITY_SCRIPTS"
 
+	# Install Hyprland plugins if on Hyprland
+	install_hyprland_plugins
+
 	# Update checksums after installation
 	if [[ "$DRY_RUN" == false ]] && [[ "$INSTALL_CONFIG" == true ]]; then
 		update_checksums

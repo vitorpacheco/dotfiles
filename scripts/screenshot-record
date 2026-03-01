@@ -1,4 +1,19 @@
-#!/bin/env bash
+#!/usr/bin/env bash
+#
+# Screenshot and Screen Recording Script for Wayland
+# 
+# Description: Rofi-based menu for taking screenshots and recording screen.
+#              Supports selection, full screen, and specific outputs.
+# 
+# Usage: screenshot-record
+# 
+# Requirements: wf-recorder, grim, slurp, rofi, wl-copy (wl-clipboard)
+# 
+# Keybindings: Run via keybinding or rofi menu
+# 
+# Note: Screenshots saved to ~/pictures/screenshots/
+#       Recordings saved to ~/videos/recordings/
+#
 
 wf-recorder_check() {
 	if pgrep -x "wf-recorder" > /dev/null; then

@@ -34,6 +34,9 @@ make install-all
 
 # Full: Everything (packages, apps, configs, installers)
 ./install --profile=full
+
+# Omarchy: Install Omarchy-specific overrides only (tmux, hyprland)
+./install --profile=omarchy
 ```
 
 ### Individual Components
@@ -63,6 +66,9 @@ make install-all
 # Icon themes (Linux only)
 ./install --icons
 
+# Omarchy overrides (Linux only)
+./install --omarchy-overrides
+
 # Run specific utility scripts
 ./install --utils="check_ryzen_perf.sh,lombok.sh"
 ```
@@ -81,6 +87,12 @@ Preview changes without applying:
 .
 ├── install                 # Main installation script
 ├── Makefile               # Make targets for common tasks
+├── lib/                   # Core library modules
+│   ├── core.sh           # Core variables and utilities
+│   ├── profiles.sh       # Profile handling and orchestration
+│   ├── installers.sh     # Installation functions
+│   ├── preflight.sh      # Pre-flight checks
+│   └── health.sh         # Health check functions
 ├── packages/
 │   ├── lib.sh            # Shared library (logging, OS detection)
 │   ├── 01-base-packages.sh
@@ -176,6 +188,9 @@ make update-submodules
 
 # Preview changes (dry run)
 make dry-run
+
+# Validate all script syntax
+make validate
 ```
 
 ## 📝 Features

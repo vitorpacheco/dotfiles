@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+#
+# VPNC Connection Script
+# 
+# Description: Connects to a VPN using vpnc with the specified profile.
+#              Backs up DNS config and restores it on disconnect.
+# 
+# Usage: connect-vpnc <profile-name>
+# 
+# Requirements: vpnc, sudo access
+# 
+# Note: Run disconnect-vpnc to properly restore DNS configuration.
+#
+
 set -euo pipefail
 
 if [[ $# -ne 1 ]]; then

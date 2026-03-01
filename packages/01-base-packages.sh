@@ -81,6 +81,7 @@ declare -A ARCH_PACKAGES=(
 	["python-awscli-local"]="AWS CLI local"
 	["jdtls"]="Java LSP"
 	["luarocks"]="Lua package manager"
+	["hyprpm"]="Hyprland plugin manager"
 )
 
 declare -A MACOS_PACKAGES=(

@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+#
+# Media Deduplication Script
+# 
+# Description: Removes duplicate media files across all subdirectories using rmlint.
+#              Deletes .mp3 files and finds duplicates with rmlint.
+# 
+# Usage: cd /path/to/media && dedup-media
+# 
+# Requirements: rmlint
+#
+
+set -euo pipefail
+
+# Run this from the TOP level directory
+ROOT_DIR="$(pwd)"
+
+echo "▶ Root directory: $ROOT_DIR"
+
+# 1. Clean up unwanted file types first
+echo "▶ Deleting .mp3 files (recursively)..."
+find . -type f -iname "*.mp3" -delete
+
+# 2. Run rmlint on the entire tree
+# --types="duplicates": Only find identical file content
+# --keep-all-order: Tells rmlint to keep the copy in the
+# folder that comes first alphabetically (e.g., folder1 wins over folder2)
+echo "▶ Scanning all folders for duplicates (this may take a moment)..."
+rmlint -T df -S a --progress "$ROOT_DIR"
+
+# 3. Check if any duplicates were found
+if [ -f rmlint.sh ]; then
+    echo "▶ Duplicates found! Running cleanup script..."
+    # -d: delete files
+    # -c: remove empty directories left behind
+    ./rmlint.sh -dc
+
+    # Cleanup rmlint's temporary files
+    rm rmlint.sh rmlint.json
+    echo "✔ Duplicates removed across all folders."
+else
+    echo "✔ No duplicates found. Everything is unique!"
+fi
+
+echo "▶ Done."

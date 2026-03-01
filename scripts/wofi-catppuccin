@@ -1,4 +1,16 @@
 #!/usr/bin/env bash
+#
+# Wofi Launcher with Catppuccin Theme
+# 
+# Description: Launches wofi application launcher with Catppuccin Mocha theme.
+#              Toggles wofi if already running.
+# 
+# Usage: wofi-catppuccin
+# 
+# Requirements: wofi
+# 
+# Note: Uses ~/.config/wofi/ for configuration
+#
 
 CONFIG="$HOME/.config/wofi/config/config"
 STYLE="$HOME/.config/wofi/src/mocha/style.css"

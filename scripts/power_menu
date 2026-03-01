@@ -1,4 +1,16 @@
-#!/bin/bash
+#!/usr/bin/env bash
+#
+# Power Menu for Hyprland
+# 
+# Description: Rofi-based power menu for Hyprland session management.
+#              Provides options for logout, lock, suspend, reboot, and shutdown.
+# 
+# Usage: power_menu
+# 
+# Requirements: rofi, hyprctl, hyprlock, systemctl
+# 
+# Note: Designed for Hyprland compositor
+#
 
 # Define the options for the power menu
 options="\uF008  Logout\n\uF023  Lock\n\uF00A  Suspend\n\uF021  Reboot\n\uF011  Shutdown"

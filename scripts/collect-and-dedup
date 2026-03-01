@@ -1,4 +1,13 @@
 #!/usr/bin/env bash
+#
+# Collect and Deduplicate Media Files
+# 
+# Description: Moves media files (.mp4, .jpg, .jpeg) from subdirectories to current
+#              directory, deletes .mp3 files, and removes duplicates using rmlint.
+# 
+# Usage: cd /path/to/media && collect-and-dedup
+#
+
 set -euo pipefail
 
 ROOT_DIR="$(pwd)"

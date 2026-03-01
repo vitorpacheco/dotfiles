@@ -1,0 +1,89 @@
+#!/bin/bash
+
+# --- Silence Node Deprecation Warnings ---
+export NODE_OPTIONS="--no-deprecation"
+
+# Use mise Python if available
+if [ -d "$HOME/.local/share/mise/shims" ]; then
+    export PATH="$HOME/.local/share/mise/shims:$PATH"
+    eval "$(mise hook-env 2>/dev/null || true)"
+fi
+
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+BW_VAULT_JSON="/tmp/bw_vault.json"
+TMP_KDBX="/tmp/bw_temp.kdbx"
+KP_DB_PATH="$HOME/SynologyDrive/documents/kp-db/passwords.kdbx"
+
+# Check if pykeepass is installed
+PYTHON_CMD="${MISE_PYTHON:-python3}"
+PIP_CMD="${MISE_PIP:-pip3}"
+if ! $PYTHON_CMD -c "import pykeepass" 2>/dev/null; then
+    echo "pykeepass is not installed. Installing with $PIP_CMD..."
+    
+    # Use the Python's pip to install pykeepass
+    $PIP_CMD install --user pykeepass
+    
+    # Re-check
+    if ! $PYTHON_CMD -c "import pykeepass" 2>/dev/null; then
+        echo "Error: Failed to install pykeepass"
+        exit 1
+    fi
+fi
+
+# Cleanup function that runs on exit (even on error)
+cleanup() {
+    rm -f "$BW_VAULT_JSON" "$TMP_KDBX"
+    unset BW_SESSION 2>/dev/null
+    unset KP_PASS 2>/dev/null
+}
+trap cleanup EXIT
+
+# 1. Sync Bitwarden and Export
+echo "Step 1: Unlocking Bitwarden..."
+export BW_SESSION=$(bw unlock --raw)
+
+if [ -z "$BW_SESSION" ]; then
+    echo "Error: Bitwarden unlock failed."
+    exit 1
+fi
+
+echo "Syncing Bitwarden cloud..."
+bw sync --session $BW_SESSION
+bw export --format json --session $BW_SESSION --output $BW_VAULT_JSON
+
+# --- 2. Get KeePassXC Password ---
+echo ""
+read -s -p "Enter your KeePassXC Master Password: " KP_PASS
+echo ""
+
+# --- 3. Convert JSON to Temp KDBX ---
+echo "Step 2: Converting Bitwarden JSON to temporary KDBX..."
+$PYTHON_CMD "$SCRIPT_DIR/bw-to-keepass.py" "$BW_VAULT_JSON" "$TMP_KDBX" "$KP_PASS"
+
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to convert Bitwarden export to KDBX format"
+    exit 1
+fi
+
+# Verify temp database was created
+if [ ! -f "$TMP_KDBX" ]; then
+    echo "Error: Temporary database was not created"
+    exit 1
+fi
+
+echo "Created temporary database: $TMP_KDBX"
+
+# --- 4. Merge into Synology Vault ---
+echo "Step 3: Merging updates into Synology Drive..."
+if [ -f "$KP_DB_PATH" ]; then
+    # Merge if file exists
+    printf "%s\n%s\n" "$KP_PASS" "$KP_PASS" | keepassxc-cli merge "$KP_DB_PATH" "$TMP_KDBX"
+else
+    # If the file doesn't exist yet, move the temp one to the destination
+    echo "Target database not found. Creating new database at $KP_DB_PATH"
+    mkdir -p "$(dirname "$KP_DB_PATH")"
+    mv "$TMP_KDBX" "$KP_DB_PATH"
+fi
+
+echo "Sync complete!"

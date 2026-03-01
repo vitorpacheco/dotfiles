@@ -1,4 +1,0 @@
-#!/usr/bin/env zsh
-
-export LMSTUDIO_API_KEY=lmstudio
-export LOCAL_ENDPOINT="http://127.0.0.1:1234"
