@@ -47,6 +47,7 @@ show_help() {
 	echo "  --gnome              Execute scripts in gnome/ (GNOME desktop settings - Linux only)"
 	echo "  --icons              Execute icons/install.sh (Linux only)"
 	echo "  --omarchy-overrides  Install Omarchy-specific overrides only (tmux, hyprland)"
+	echo "  --kool-overrides     Install Kool Hyprland overrides only (tmux, hyprland, ghostty)"
 	echo ""
 	log_info "Utility Scripts (from utils/):"
 	echo "  --utils=\"script1.sh,script2.sh\" Execute specific utility scripts"
@@ -55,6 +56,7 @@ show_help() {
 	echo "  --profile=minimal    Install only essential configs (zsh, git, tmux)"
 	echo "  --profile=full       Install everything"
 	echo "  --profile=omarchy    Install Omarchy overrides only (tmux, hyprland)"
+	echo "  --profile=kool       Install Kool Hyprland overrides only (tmux, hyprland, ghostty)"
 	echo ""
 	log_info "Platform Support:"
 	echo "  - Linux (Ubuntu/Debian, Arch): Full support"
@@ -144,6 +146,11 @@ is_gnome() {
 
 is_hyprland() {
 	[[ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]] || [[ "$XDG_SESSION_DESKTOP" == "hyprland" ]] || [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]
+}
+
+is_kool() {
+	# Detect JaKooLit Hyprland dotfiles by checking for UserConfigs directory
+	[[ -d "$HOME/.config/hypr/UserConfigs" ]]
 }
 
 # Initialize log file

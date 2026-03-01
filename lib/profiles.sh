@@ -21,6 +21,7 @@ INSTALL_INSTALLERS=false
 INSTALL_PACKAGES=false
 INSTALL_LOCAL_SCRIPTS=false
 INSTALL_OMARCHY_OVERRIDES=false
+INSTALL_KOOL_OVERRIDES=false
 CHECK_HEALTH=false
 RESTORE=false
 UTILITY_SCRIPTS=""
@@ -77,6 +78,9 @@ parse_arguments() {
 		--omarchy-overrides)
 			INSTALL_OMARCHY_OVERRIDES=true
 			;;
+		--kool-overrides)
+			INSTALL_KOOL_OVERRIDES=true
+			;;
 		--utils=*)
 			UTILITY_SCRIPTS="${arg#*=}"
 			;;
@@ -114,8 +118,15 @@ apply_profile() {
 		INSTALL_ICONS=true
 		;;
 	omarchy)
-		log_info "Using omarchy profile - installing overrides only"
+		log_info "Using omarchy profile - installing overrides and configs"
+		INSTALL_CONFIG=true
 		INSTALL_OMARCHY_OVERRIDES=true
+		INSTALL_LOCAL_SCRIPTS=true
+		;;
+	kool)
+		log_info "Using kool profile - installing Kool Hyprland overrides and configs"
+		INSTALL_CONFIG=true
+		INSTALL_KOOL_OVERRIDES=true
 		INSTALL_LOCAL_SCRIPTS=true
 		;;
 	*)
@@ -187,6 +198,10 @@ run_installation() {
 
 	if [[ "$INSTALL_OMARCHY_OVERRIDES" == true ]]; then
 		install_omarchy_overrides
+	fi
+
+	if [[ "$INSTALL_KOOL_OVERRIDES" == true ]]; then
+		install_kool_overrides
 	fi
 
 	execute_utils "$UTILITY_SCRIPTS"

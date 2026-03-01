@@ -246,6 +246,160 @@ source = ./omarchy-overrides.conf'
 	log_success "Omarchy overrides installation complete"
 }
 
+install_kool_overrides() {
+	# First check if Kool dotfiles are detected, but don't fail if not
+	# (allow force install via flag)
+	if ! is_kool && [[ "${INSTALL_KOOL_OVERRIDES:-false}" != true ]]; then
+		log_warn "Kool Hyprland dotfiles not detected (no ~/.config/hypr/UserConfigs/)."
+		log_info "Install Kool dotfiles first, or use --kool-overrides to force installation."
+		return 0
+	fi
+
+	log_info "Installing Kool Hyprland overrides..."
+
+	# Install Ghostty first (needed for terminal override)
+	local ghostty_script="$SCRIPT_DIR/../installers/06-ghostty.sh"
+	if [[ -f "$ghostty_script" ]]; then
+		log_info "Installing Ghostty terminal..."
+		bash "$ghostty_script" || log_warn "Ghostty installation may have failed"
+	else
+		log_warn "Ghostty installer not found at $ghostty_script"
+	fi
+
+	# Install tmux overrides
+	local tmux_override_source="$DOTFILES_DIR/config-files/tmux/kool-overrides.conf"
+	local tmux_override_dest="$CONFIG_DIR/tmux/kool-overrides.conf"
+	local tmux_system_conf="$CONFIG_DIR/tmux/tmux.conf"
+
+	if [[ -f "$tmux_override_source" ]]; then
+		if [[ "$DRY_RUN" == true ]]; then
+			log_info "[DRY-RUN] Would create symlink: kool-overrides.conf"
+		else
+			create_symlink "$tmux_override_source" "$tmux_override_dest"
+		fi
+
+		# Add source line to system tmux.conf
+		if [[ -f "$tmux_system_conf" ]]; then
+			local tmux_source_line='# Source Kool overrides
+if-shell "[ -f ~/.config/tmux/kool-overrides.conf ]" "source-file ~/.config/tmux/kool-overrides.conf"'
+
+			if ! grep -q "kool-overrides.conf" "$tmux_system_conf" 2>/dev/null; then
+				if [[ "$DRY_RUN" == true ]]; then
+					log_info "[DRY-RUN] Would add source line to $tmux_system_conf"
+				else
+					echo "" >>"$tmux_system_conf"
+					echo "$tmux_source_line" >>"$tmux_system_conf"
+					log_success "Added source line to tmux.conf"
+				fi
+			else
+				log_info "Source line already present in tmux.conf"
+			fi
+		fi
+	else
+		log_warn "tmux overrides file not found"
+	fi
+
+	# Install hyprland overrides
+	local hypr_override_source="$DOTFILES_DIR/config-files/hypr/kool-overrides.conf"
+	local hypr_override_dest="$CONFIG_DIR/hypr/kool-overrides.conf"
+	local hypr_system_conf="$CONFIG_DIR/hypr/hyprland.conf"
+
+	if [[ -f "$hypr_override_source" ]]; then
+		if [[ "$DRY_RUN" == true ]]; then
+			log_info "[DRY-RUN] Would create symlink: kool-overrides.conf"
+		else
+			create_symlink "$hypr_override_source" "$hypr_override_dest"
+		fi
+
+		# Add source line to system hyprland.conf
+		if [[ -f "$hypr_system_conf" ]]; then
+			local hypr_source_line='# Source Kool overrides
+source = ./kool-overrides.conf'
+
+			if ! grep -q "kool-overrides.conf" "$hypr_system_conf" 2>/dev/null; then
+				if [[ "$DRY_RUN" == true ]]; then
+					log_info "[DRY-RUN] Would add source line to $hypr_system_conf"
+				else
+					echo "" >>"$hypr_system_conf"
+					echo "$hypr_source_line" >>"$hypr_system_conf"
+					log_success "Added source line to hyprland.conf"
+				fi
+			else
+				log_info "Source line already present in hyprland.conf"
+			fi
+		fi
+	else
+		log_warn "hyprland overrides file not found"
+	fi
+
+	# Install Waybar configuration symlinks (Kool-specific)
+	local waybar_configs_dir="$CONFIG_DIR/waybar/configs"
+	local waybar_styles_dir="$CONFIG_DIR/waybar/style"
+	local waybar_config_link="$CONFIG_DIR/waybar/config"
+	local waybar_style_link="$CONFIG_DIR/waybar/style.css"
+	local waybar_conf_source="$DOTFILES_DIR/config-files/waybar/kool-waybar.conf"
+
+	# Read waybar preferences from kool-waybar.conf if it exists
+	local waybar_config_name=""
+	local waybar_style_name=""
+
+	if [[ -f "$waybar_conf_source" ]]; then
+		# Extract waybar config from the waybar config file
+		waybar_config_name=$(grep -E '^WAYBAR_CONFIG=' "$waybar_conf_source" | head -1 | sed 's/^WAYBAR_CONFIG="\(.*\)"/\1/' | tr -d '"')
+		waybar_style_name=$(grep -E '^WAYBAR_STYLE=' "$waybar_conf_source" | head -1 | sed 's/^WAYBAR_STYLE="\(.*\)"/\1/' | tr -d '"')
+	fi
+
+	# Default fallback values if not set in config
+	if [[ -z "$waybar_config_name" ]]; then
+		waybar_config_name="[TOP] Default"
+	fi
+	if [[ -z "$waybar_style_name" ]]; then
+		waybar_style_name="[Dark] Wallust Obsidian Edge.css"
+	fi
+
+	# Create waybar config symlink if configs directory exists
+	if [[ -d "$waybar_configs_dir" ]]; then
+		local waybar_config_target="$waybar_configs_dir/$waybar_config_name"
+
+		if [[ -f "$waybar_config_target" ]]; then
+			if [[ "$DRY_RUN" == true ]]; then
+				log_info "[DRY-RUN] Would create waybar config symlink: $waybar_config_name"
+			else
+				backup_if_exists "$waybar_config_link"
+				ln -sf "$waybar_config_target" "$waybar_config_link"
+				log_success "Set waybar config to: $waybar_config_name"
+			fi
+		else
+			log_warn "Waybar config not found: $waybar_config_name"
+			log_info "Available configs in: $waybar_configs_dir"
+		fi
+	else
+		log_info "Waybar configs directory not found, skipping waybar config setup"
+	fi
+
+	# Create waybar style symlink if styles directory exists
+	if [[ -d "$waybar_styles_dir" ]]; then
+		local waybar_style_target="$waybar_styles_dir/$waybar_style_name"
+
+		if [[ -f "$waybar_style_target" ]]; then
+			if [[ "$DRY_RUN" == true ]]; then
+				log_info "[DRY-RUN] Would create waybar style symlink: $waybar_style_name"
+			else
+				backup_if_exists "$waybar_style_link"
+				ln -sf "$waybar_style_target" "$waybar_style_link"
+				log_success "Set waybar style to: $waybar_style_name"
+			fi
+		else
+			log_warn "Waybar style not found: $waybar_style_name"
+			log_info "Available styles in: $waybar_styles_dir"
+		fi
+	else
+		log_info "Waybar styles directory not found, skipping waybar style setup"
+	fi
+
+	log_success "Kool Hyprland overrides installation complete"
+}
+
 install_hyprland_plugins() {
 	if ! is_hyprland; then
 		log_info "Hyprland not detected, skipping Hyprland plugins installation"

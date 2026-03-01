@@ -37,21 +37,22 @@ git submodule update --remote config-files/nvim
 
 ## Available Install Flags
 
-- `--config` - Install config-files/ to ~/.config/ (includes nvim)
+- `--config` - Install config-files/ to ~/.config/ (includes nvim, ghostty)
 - `--user-config` - Install user-files/ to ~/
 - `--packages` - Run package installation scripts
-- `--installers` - Run installer scripts
+- `--installers` - Run installer scripts (includes ghostty installer)
 - `--apps` - Run app installation scripts
 - `--local-scripts` - Symlink scripts/ to ~/.local/scripts/
 - `--gnome` - Run GNOME-specific scripts (auto-detects DE)
 - `--icons` - Run icons/install.sh
-- `--omarchy-overrides` - Install Omarchy-specific overrides
+- `--omarchy-overrides` - Install Omarchy-specific overrides (tmux, hyprland)
+- `--kool-overrides` - Install Kool Hyprland overrides (ghostty, hyprland, waybar)
 - `--utils="script.sh"` - Run specific utility from utils/
 - `--dry-run` - Preview changes without applying
 - `--verbose` - Enable verbose output
 - `--check` - Verify installation health
 - `--restore` - Restore backed up files
-- `--profile=minimal|full|omarchy` - Use predefined installation profile
+- `--profile=minimal|full|omarchy|kool` - Use predefined installation profile
 
 ## Testing Single Scripts
 
@@ -59,6 +60,7 @@ git submodule update --remote config-files/nvim
 # Validate syntax of a single script
 bash -n packages/01-base-packages.sh
 bash -n installers/01-tmux.sh
+bash -n installers/06-ghostty.sh
 bash -n apps/01-flatpak.sh
 
 # Run a single package script directly
@@ -66,6 +68,7 @@ bash packages/01-base-packages.sh
 
 # Run a single installer script directly
 bash installers/01-tmux.sh
+bash installers/06-ghostty.sh
 
 # Validate all scripts at once
 make validate
@@ -107,6 +110,7 @@ make validate
 
 **Platform Detection Functions:**
 - `is_omarchy()` - Check for Omarchy system
+- `is_kool()` - Check for JaKooLit Hyprland dotfiles
 - `is_gnome()` - Check for GNOME desktop
 - `is_hyprland()` - Check for Hyprland compositor
 - `is_macos()` - Check for macOS
@@ -172,8 +176,10 @@ All installation actions are logged to `~/.dotfiles-install.log`:
 
 - Repository supports Ubuntu/Debian and Arch Linux primarily
 - Uses Catppuccin Mocha theme consistently across tools
-- Heavy focus on terminal/CLI tooling (tmux, zsh, fzf, Helix)
+- Uses Nord theme for Hyprland and Ghostty configurations
+- Heavy focus on terminal/CLI tooling (tmux, zsh, fzf, Helix, ghostty)
 - Wayland/Hyprland oriented with configs for waybar, rofi, swaync
+- Kool Hyprland support with automatic waybar layout/style configuration
 - `set +h` in zsh rc disables command hashing for mise compatibility
 - The `install` script is the main orchestrator - always use it for changes
 - Uses symlinks instead of copying files for easy updates

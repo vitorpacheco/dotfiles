@@ -21,6 +21,7 @@ make install-all
 - **Linux**
   - Ubuntu/Debian (apt)
   - Arch Linux (yay/pacman)
+  - Hyprland with JaKooLit dotfiles (Ubuntu 25.10+)
 - **macOS** (Apple Silicon & Intel)
   - Homebrew for package management
 
@@ -29,14 +30,17 @@ make install-all
 ### Profiles
 
 ```bash
-# Minimal: Essential configs only (zsh, git, tmux)
+# Minimal: Essential configs only (zsh, git, tmux, ghostty)
 ./install --profile=minimal
 
 # Full: Everything (packages, apps, configs, installers)
 ./install --profile=full
 
-# Omarchy: Install Omarchy-specific overrides only (tmux, hyprland)
+# Omarchy: Configs + Omarchy-specific overrides (tmux, hyprland)
 ./install --profile=omarchy
+
+# Kool: Configs + Kool Hyprland overrides (ghostty, hyprland, waybar)
+./install --profile=kool
 ```
 
 ### Individual Components
@@ -48,7 +52,7 @@ make install-all
 # Install user configs to home directory
 ./install --user-config
 
-# Run installer scripts (tmux, zsh, mise, etc.)
+# Run installer scripts (tmux, zsh, mise, ghostty, etc.)
 ./install --installers
 
 # Install system packages
@@ -68,6 +72,9 @@ make install-all
 
 # Omarchy overrides (Linux only)
 ./install --omarchy-overrides
+
+# Kool Hyprland overrides (Linux only)
+./install --kool-overrides
 
 # Run specific utility scripts
 ./install --utils="check_ryzen_perf.sh,lombok.sh"
@@ -105,7 +112,8 @@ Preview changes without applying:
 │   ├── 02-oh-my-zsh.sh
 │   ├── 03-homebrew.sh
 │   ├── 04-mise.sh
-│   └── 05-bat-themes.sh
+│   ├── 05-bat-themes.sh
+│   └── 06-ghostty.sh     # Ghostty terminal installer
 ├── apps/
 │   ├── 01-flatpak.sh     # Linux only
 │   ├── 02-docker.sh
@@ -115,12 +123,22 @@ Preview changes without applying:
 │   ├── nvim/            # Neovim config (submodule)
 │   ├── zsh/
 │   ├── tmux/
+│   │   ├── omarchy-overrides.conf    # Omarchy-specific tmux binds
+│   │   └── kool-overrides.conf       # Kool-specific tmux binds
+│   ├── hypr/
+│   │   ├── omarchy-overrides.conf    # Omarchy Hyprland overrides
+│   │   └── kool-overrides.conf       # Kool Hyprland overrides (Nord theme)
+│   ├── waybar/
+│   │   └── kool-waybar.conf          # Kool waybar layout/style config
+│   ├── ghostty/
+│   │   └── config                    # Universal ghostty config (Nord theme)
 │   └── ...
 ├── user-files/          # Dotfiles for home directory
 │   ├── zshrc
 │   ├── gitconfig
-│   └── ...
+│   └── tmux.conf
 ├── scripts/             # Utility scripts
+│   └── tmux-sessionizer # Tmux workspace selector
 ├── gnome/               # GNOME desktop settings (Linux)
 ├── icons/               # Icon themes (Linux)
 └── utils/               # Additional utilities
@@ -134,6 +152,7 @@ Essential command-line tools:
 
 - **Shell & Tools**: zsh, tmux, git, git-delta, fzf, bat, eza, fd
 - **System**: htop/btop, fastfetch, rofi, plocate
+- **Terminal**: ghostty (Nord theme)
 - **Development**: neovim, lazygit, lazydocker, jq
 - **Cloud**: awscli, awscli-local
 - **Prompt**: oh-my-posh, spaceship
@@ -156,20 +175,36 @@ Essential command-line tools:
 
 - **Zsh**: Full configuration with Oh-My-Zsh, theme, aliases, functions
 - **Neovim**: Complete configuration (submodule)
-- **Tmux**: TPM plugins, keybindings, status bar
+- **Tmux**: TPM plugins, keybindings, status bar + sessionizer
 - **Git**: Delta integration, aliases
+- **Ghostty**: Universal terminal config with Nord theme (Omarchy compatible)
 - **Rofi**: Application launcher
 - **Waybar**: Status bar (Hyprland)
 
+### Hyprland Support (Linux)
+
+- **Omarchy Overrides**: Custom keybinds, window rules, input settings
+- **Kool Overrides**: Omarchy-style keybinds + Nord theme + dual keyboard layout (us/br)
+- **Waybar**: Layout and style configuration for Kool installations
+
 ## 🎨 Themes
 
-The dotfiles use **Catppuccin Mocha** theme consistently across:
+The dotfiles support multiple themes consistently across tools:
 
-- Terminal (Alacritty)
+### Catppuccin Mocha (Default)
+- Terminal (legacy configs)
 - Editor (Neovim, VS Code)
-- Launcher (Rofi)
-- Status bar (Waybar)
 - Git (delta)
+
+### Nord (Hyprland + Ghostty)
+- **Hyprland**: Window borders, decorations, animations
+- **Ghostty**: Terminal background, foreground, cursor
+- **Waybar**: Status bar styling (with Kool integration)
+- Color palette: Polar Night, Snow Storm, Frost, Aurora
+
+### Omarchy Integration
+On Omarchy systems, the theme is dynamically loaded from `~/.config/omarchy/current/theme/`.
+On other systems (macOS, Ubuntu, Arch), the Nord theme is used as the default.
 
 ## 🔍 Maintenance Commands
 
@@ -191,17 +226,63 @@ make dry-run
 
 # Validate all script syntax
 make validate
+
+# Update waybar config (Kool)
+# Edit: config-files/waybar/kool-waybar.conf
+# Then run: ./install --kool-overrides
 ```
 
 ## 📝 Features
 
 - **Cross-Platform**: Works on Ubuntu/Debian, Arch Linux, and macOS
+- **Hyprland Support**: Omarchy and JaKooLit (Kool) dotfiles integration
+- **Universal Terminal**: Ghostty with Nord theme, compatible with Omarchy
+- **Waybar Config**: Automatic layout/style selection for Kool installations
+- **Dual Keyboard Layout**: us + pt-br with compose key support
 - **Dry Run Mode**: Preview all changes before applying
 - **Backup System**: Automatically backs up existing files before overwriting
 - **Health Check**: Verify installation integrity and detect broken symlinks
 - **Modular**: Install only what you need
 - **Idempotent**: Safe to run multiple times
 - **Logging**: All actions logged to `~/.dotfiles-install.log`
+
+## 🐧 Hyprland & Kool Support
+
+This dotfiles repository provides enhanced support for Hyprland window manager configurations:
+
+### Omarchy Integration
+For [Omarchy](https://omarchy.io/) users:
+- Detects Omarchy installation automatically
+- Applies custom keybinds for tmux and hyprland
+- Loads dynamic themes from `~/.config/omarchy/current/theme/`
+- Adds web app launchers (Signal, Obsidian, etc.)
+
+### JaKooLit (Kool) Integration
+For [JaKooLit Hyprland dotfiles](https://github.com/JaKooLit) users:
+- **Detection**: Automatically detects Kool installation via `~/.config/hypr/UserConfigs/`
+- **Keybinds**: Omarchy-style keybinds (SUPER+W for close, SUPER+SPACE for rofi, etc.)
+- **Theme**: Nord color scheme for hyprland decorations and borders
+- **Terminal**: Ghostty with $term variable
+- **File Manager**: Nautilus with $files variable
+- **Editor**: Neovim (nvim) with $editor variable
+- **Keyboard**: Dual layout (us + pt-br) with compose:caps
+- **Waybar**: Automatic layout/style selection via `config-files/waybar/kool-waybar.conf`
+
+### Usage
+
+```bash
+# Install Kool dotfiles first, then:
+./install --profile=kool
+
+# Or just the overrides (if you already have configs):
+./install --kool-overrides
+
+# Customize waybar:
+# 1. Edit: config-files/waybar/kool-waybar.conf
+# 2. Set: WAYBAR_CONFIG="[TOP] Default"
+# 3. Set: WAYBAR_STYLE="[Dark] Wallust Obsidian Edge.css"
+# 4. Run: ./install --kool-overrides
+```
 
 ## 🐛 Troubleshooting
 
@@ -210,18 +291,25 @@ make validate
 1. **Homebrew not found**: Install manually from https://brew.sh
 2. **Xcode Command Line Tools**: Run `xcode-select --install`
 3. **Apple Silicon PATH issues**: Ensure `/opt/homebrew/bin` is in PATH
+4. **Ghostty installation**: Uses Homebrew cask on macOS
 
 ### Linux Specific
 
 1. **yay not found (Arch)**: Install yay first: https://github.com/Jguer/yay
 2. **Permission errors**: Some scripts require sudo (will prompt)
 3. **GNOME settings not applying**: Ensure you're running a GNOME session
+4. **Hyprland/Kool issues**: 
+   - Ensure JaKooLit dotfiles are installed first
+   - Check `~/.config/hypr/UserConfigs/` exists
+   - Run `./install --kool-overrides` after Kool installation
+5. **Ghostty installation (Ubuntu)**: Uses snap with `--classic` flag
 
 ### General
 
 1. **Check log**: `cat ~/.dotfiles-install.log`
 2. **Verify health**: `./install --check`
 3. **Restore backups**: `./install --restore`
+4. **Waybar config not applying**: Check `config-files/waybar/kool-waybar.conf` syntax
 
 ## 🤝 Contributing
 
@@ -240,9 +328,12 @@ MIT License - See LICENSE file for details
 ## 🙏 Credits
 
 - [Catppuccin](https://github.com/catppuccin) - Color scheme
+- [Nord](https://www.nordtheme.com/) - Arctic color palette for Hyprland/Ghostty
 - [Oh My Zsh](https://ohmyz.sh/) - Zsh framework
 - [Homebrew](https://brew.sh/) - Package manager (macOS/Linux)
 - [mise](https://mise.jdx.dev/) - Development environment manager
+- [JaKooLit](https://github.com/JaKooLit) - Hyprland dotfiles inspiration
+- [Ghostty](https://ghostty.org/) - Terminal emulator
 
 ---
 
