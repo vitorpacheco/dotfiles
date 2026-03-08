@@ -427,6 +427,13 @@ install_hyprland_plugins() {
 			return 1
 		}
 		log_success "Added hyprland-plugins repository"
+
+		log_info "Updating hyprpm repository..."
+		hyprpm update -q || {
+			log_error "Failed to update hyprpm repository"
+			return 1
+		}
+		log_success "Updated hyprpm repository"
 	else
 		log_info "hyprland-plugins repository already added"
 	fi
