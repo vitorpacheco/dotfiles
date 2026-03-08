@@ -31,9 +31,25 @@ install_config_files() {
 	log_info "Installing config files to $CONFIG_DIR..."
 	mkdir -p "$CONFIG_DIR"
 
+	# Configs to skip when running on Omarchy (to preserve Omarchy's system configs)
+	local omarchy_excluded_configs=("hypr" "waybar" "btop" "kitty" "ghostty" "wlogout" "nwg-look" "rofi" "swaync")
+
 	for file in "$DOTFILES_DIR/config-files"/*; do
 		if [[ -e "$file" ]]; then
-			local dest="$CONFIG_DIR/$(basename "$file")"
+			local basename_file
+			basename_file=$(basename "$file")
+
+			# Skip Omarchy system configs when on Omarchy
+			if is_omarchy; then
+				for excluded in "${omarchy_excluded_configs[@]}"; do
+					if [[ "$basename_file" == "$excluded" ]]; then
+						log_info "[OMARCHY] Skipping $basename_file (preserving Omarchy system config)"
+						continue 2
+					fi
+				done
+			fi
+
+			local dest="$CONFIG_DIR/$basename_file"
 			create_symlink "$file" "$dest"
 		fi
 	done

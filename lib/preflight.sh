@@ -8,12 +8,72 @@
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source "$SCRIPT_DIR/lib/core.sh"
 
+# --- Shell Check ---
+check_shell_is_zsh() {
+	local current_shell
+	current_shell="$(ps -p $$ -o comm=)"
+
+	if [[ "$current_shell" != "zsh" ]]; then
+		log_error "This script must be run from zsh shell. Current shell: $current_shell"
+		log_info "Please run: zsh $0"
+		return 1
+	fi
+
+	log_success "Running in zsh shell"
+	return 0
+}
+
+# --- Arch base-devel Check ---
+ensure_base_devel_installed() {
+	log_info "Checking base-devel package on Arch Linux..."
+
+	local pkg_mgr
+	pkg_mgr=$(get_package_manager)
+
+	if [[ "$pkg_mgr" != "yay" && "$pkg_mgr" != "pacman" ]]; then
+		log_error "No package manager found for Arch (yay or pacman required)"
+		return 1
+	fi
+
+	# Check if base-devel is installed
+	if pacman -Q base-devel &>/dev/null; then
+		log_success "base-devel is already installed"
+		return 0
+	fi
+
+	# Auto-install base-devel
+	log_info "base-devel not found. Auto-installing..."
+
+	if [[ "$DRY_RUN" == true ]]; then
+		log_info "[DRY-RUN] Would install base-devel package group"
+		return 0
+	fi
+
+	if [[ "$pkg_mgr" == "yay" ]]; then
+		yay -S --noconfirm base-devel || {
+			log_error "Failed to install base-devel via yay"
+			return 1
+		}
+	else
+		sudo pacman -S --noconfirm base-devel || {
+			log_error "Failed to install base-devel via pacman"
+			return 1
+		}
+	fi
+
+	log_success "base-devel installed successfully"
+	return 0
+}
+
 # --- Pre-flight Checks ---
 run_preflight_checks() {
 	log_info "Running pre-flight checks..."
 
 	local errors=0
 	local warnings=0
+
+	# Check if running in zsh shell
+	check_shell_is_zsh || errors=$((errors + 1))
 
 	# Check OS
 	local os
@@ -38,6 +98,11 @@ run_preflight_checks() {
 		warnings=$((warnings + 1))
 		;;
 	esac
+
+	# Ensure base-devel is installed on Arch Linux
+	if [[ "$os" == "arch" ]]; then
+		ensure_base_devel_installed || errors=$((errors + 1))
+	fi
 
 	# Check essential commands
 	local required_commands=("git" "bash" "ln")
