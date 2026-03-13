@@ -38,7 +38,7 @@ LLAMA_PARALLEL="${LLAMA_PARALLEL:-8}"
 declare -A MODEL_ARGS=(
   # Qwen2.5 Coder 7B GGUF local
   [qwen2_5-coder]="
-    -m $HOME/models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
+    -m $HOME/models/qwen2.5-coder-7b-instruct-q4_k_m.gguf
     --chat-template chatml
     --jinja
     --ctx-size 4096
@@ -103,7 +103,7 @@ declare -A MODEL_PORT=(
 # HuggingFace source for auto-download: "owner/repo filename"
 # Models without an entry (e.g. gpt-oss) are assumed to self-download
 declare -A MODEL_HF=(
-  [qwen2_5-coder]="Qwen/Qwen2.5-Coder-7B-Instruct-GGUF Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+  [qwen2_5-coder]="Qwen/Qwen2.5-Coder-7B-Instruct-GGUF qwen2.5-coder-7b-instruct-q4_k_m.gguf"
   [qwen3]="Qwen/Qwen3-8B-GGUF Qwen3-8B-Q4_K_M.gguf"
   [qwen3_5]="bartowski/Qwen_Qwen3.5-9B-GGUF Qwen_Qwen3.5-9B-Q4_K_M.gguf"
 )
@@ -113,7 +113,7 @@ REASONING_MODELS=(qwen3 qwen3_5)
 
 # Local path for each model file
 declare -A MODEL_PATH=(
-  [qwen2_5-coder]="$HOME/models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+  [qwen2_5-coder]="$HOME/models/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
   [qwen3]="$HOME/models/Qwen3-8B-Q4_K_M.gguf"
   [qwen3_5]="$HOME/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf"
 )
