@@ -39,7 +39,7 @@ declare -A MODEL_ARGS=(
 
   # Qwen3.5 9B GGUF local
   [qwen3_5]="
-    -m $HOME/models/Qwen3.5-9B-Instruct-Q4_K_M.gguf
+    -m $HOME/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf
     --jinja
     --ctx-size 8192
     --batch-size 1024
@@ -75,13 +75,13 @@ declare -A MODEL_PORT=(
 # Models without an entry (e.g. gpt-oss) are assumed to self-download
 declare -A MODEL_HF=(
   [qwen2_5-coder]="Qwen/Qwen2.5-Coder-7B-Instruct-GGUF Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
-  [qwen3_5]="bartowski/Qwen_Qwen3.5-9B-GGUF Qwen3.5-9B-Instruct-Q4_K_M.gguf"
+  [qwen3_5]="bartowski/Qwen_Qwen3.5-9B-GGUF Qwen_Qwen3.5-9B-Q4_K_M.gguf"
 )
 
 # Local path for each model file
 declare -A MODEL_PATH=(
   [qwen2_5-coder]="$HOME/models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
-  [qwen3_5]="$HOME/models/Qwen3.5-9B-Instruct-Q4_K_M.gguf"
+  [qwen3_5]="$HOME/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf"
 )
 
 ensure_model() {
