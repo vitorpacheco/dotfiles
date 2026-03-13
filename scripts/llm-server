@@ -168,12 +168,12 @@ declare -A MODEL_PATH=(
 # Speculative decoding is most impactful when the target runs below ~15 t/s.
 declare -A MODEL_DRAFT_HF=(
   [qwen2_5-coder]="Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF qwen2.5-coder-0.5b-instruct-q4_k_m.gguf"
-  [qwen3]="Qwen/Qwen3-0.6B-GGUF Qwen3-0.6B-Q4_K_M.gguf"
+  [qwen3]="Qwen/Qwen3-0.6B-GGUF Qwen3-0.6B-Q8_0.gguf"
 )
 
 declare -A MODEL_DRAFT_PATH=(
   [qwen2_5-coder]="$HOME/models/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf"
-  [qwen3]="$HOME/models/Qwen3-0.6B-Q4_K_M.gguf"
+  [qwen3]="$HOME/models/Qwen3-0.6B-Q8_0.gguf"
 )
 
 # =============================================================================
