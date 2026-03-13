@@ -130,14 +130,13 @@ declare -A MODEL_ARGS=(
   [gpt-oss]="
     --gpt-oss-20b-default
     --ctx-size 4096
+    --parallel 2
     --batch-size 1024
     --ubatch-size 256
     --flash-attn on
     --cache-type-k q8_0
     --cache-type-v q8_0
     --cpu-moe
-    --fit on
-    --fit-target 2048
     --n-gpu-layers auto
   "
 )
@@ -158,7 +157,7 @@ declare -A MODEL_HF=(
 )
 
 # Models that support reasoning/thinking mode (--reasoning-budget)
-REASONING_MODELS=(qwen3 qwen3_5)
+REASONING_MODELS=(qwen3 qwen3_5 gpt-oss)
 
 # Local path for each model file
 declare -A MODEL_PATH=(
@@ -652,8 +651,6 @@ fi
 # Launch
 # shellcheck disable=SC2086
 exec "$LLAMA_SERVER" \
-  --host "$HOST" \
-  --port "$PORT" \
   --threads "$LLAMA_THREADS" \
   --threads-batch "$LLAMA_THREADS_BATCH" \
   --threads-http "$LLAMA_THREADS_HTTP" \
@@ -661,4 +658,6 @@ exec "$LLAMA_SERVER" \
   ${MODEL_ARGS[$MODEL]} \
   "${REASONING_ARGS[@]}" \
   "${DRAFT_ARGS[@]}" \
+  --host "$HOST" \
+  --port "$PORT" \
   "${PASSTHRU[@]}"
