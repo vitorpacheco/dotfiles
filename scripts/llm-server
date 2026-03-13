@@ -404,11 +404,11 @@ benchmark_model() {
   local server_pid
   # shellcheck disable=SC2086
   "$LLAMA_SERVER" \
-    --host 127.0.0.1 --port "$port" \
     --threads "$LLAMA_THREADS" --threads-batch "$LLAMA_THREADS_BATCH" \
     --threads-http "$LLAMA_THREADS_HTTP" --parallel 1 \
     --log-disable \
     ${MODEL_ARGS[$model]} \
+    --host 127.0.0.1 --port "$port" \
     "${reasoning_args[@]}" > /dev/null 2>&1 &
   server_pid=$!
 
