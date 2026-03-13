@@ -1,7 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LLAMA_SERVER="${LLAMA_SERVER:-$HOME/applications/llama.cpp/build/bin/llama-server}"
+if [[ -n "${LLAMA_SERVER:-}" ]]; then
+  : # use env override as-is
+elif command -v llama-server &>/dev/null; then
+  LLAMA_SERVER="llama-server"
+elif [[ -x "$HOME/applications/llama.cpp/build/bin/llama-server" ]]; then
+  LLAMA_SERVER="$HOME/applications/llama.cpp/build/bin/llama-server"
+else
+  echo "Erro: llama-server não encontrado (PATH, ~/applications/llama.cpp/build/bin/, ou \$LLAMA_SERVER)"
+  exit 1
+fi
 
 # ----------------------------
 # Performance/parallelism knobs (defaults tuned for Ryzen 7 5700X)
