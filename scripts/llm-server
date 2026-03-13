@@ -38,7 +38,7 @@ declare -A MODEL_ARGS=(
     --ctx-size 4096
     --batch-size 1024
     --ubatch-size 256
-    --flash-attn
+    --flash-attn on
     --cache-type-k q8_0
     --cache-type-v q8_0
     --fit on
@@ -53,7 +53,7 @@ declare -A MODEL_ARGS=(
     --ctx-size 8192
     --batch-size 1024
     --ubatch-size 256
-    --flash-attn
+    --flash-attn on
     --cache-type-k q8_0
     --cache-type-v q8_0
     --n-gpu-layers auto
@@ -65,7 +65,7 @@ declare -A MODEL_ARGS=(
     --ctx-size 4096
     --batch-size 1024
     --ubatch-size 256
-    --flash-attn
+    --flash-attn on
     --cache-type-k q8_0
     --cache-type-v q8_0
     --fit on
