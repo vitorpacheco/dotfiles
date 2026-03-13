@@ -1,15 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ -n "${LLAMA_SERVER:-}" ]]; then
-  : # use env override as-is
-elif command -v llama-server &>/dev/null; then
-  LLAMA_SERVER="llama-server"
-elif [[ -x "$HOME/applications/llama.cpp/build/bin/llama-server" ]]; then
-  LLAMA_SERVER="$HOME/applications/llama.cpp/build/bin/llama-server"
-else
-  echo "Erro: llama-server não encontrado (PATH, ~/applications/llama.cpp/build/bin/, ou \$LLAMA_SERVER)"
-  exit 1
+LLAMA_DIR="${LLAMA_DIR:-$HOME/applications/llama.cpp}"
+
+# Skip binary detection for setup command (binary may not exist yet)
+if [[ "${1:-}" != "setup" ]]; then
+  if [[ -n "${LLAMA_SERVER:-}" ]]; then
+    : # use env override as-is
+  elif command -v llama-server &>/dev/null; then
+    LLAMA_SERVER="llama-server"
+  elif [[ -x "$LLAMA_DIR/build/bin/llama-server" ]]; then
+    LLAMA_SERVER="$LLAMA_DIR/build/bin/llama-server"
+  else
+    echo "Erro: llama-server não encontrado (PATH, $LLAMA_DIR/build/bin/, ou \$LLAMA_SERVER)"
+    echo "Dica: rode 'llm-server setup' para compilar do zero"
+    exit 1
+  fi
 fi
 
 # ----------------------------
@@ -128,10 +134,17 @@ download_model_file() {
 
 hf_lfs_sha256() {
   local repo="$1" file="$2"
-  command -v curl &>/dev/null || return 1
   command -v python3 &>/dev/null || return 1
-  curl -sf "https://huggingface.co/api/models/$repo/tree/main" \
-    | python3 -c "
+  local url="https://huggingface.co/api/models/$repo/tree/main"
+  local json
+  if command -v curl &>/dev/null; then
+    json=$(curl -sf "$url") || return 1
+  elif command -v wget &>/dev/null; then
+    json=$(wget -qO- "$url") || return 1
+  else
+    return 1
+  fi
+  echo "$json" | python3 -c "
 import json, sys
 try:
     for f in json.load(sys.stdin):
@@ -205,10 +218,58 @@ update_model() {
   echo "$model: atualizado com sucesso"
 }
 
+setup_llama() {
+  local build_deps=(git cmake ninja cuda)
+  local missing=()
+  for pkg in "${build_deps[@]}"; do
+    pacman -Q "$pkg" &>/dev/null || missing+=("$pkg")
+  done
+  # base-devel proxy check
+  command -v gcc &>/dev/null || missing+=(base-devel)
+
+  if [[ ${#missing[@]} -gt 0 ]]; then
+    echo "Pacotes necessários não encontrados: ${missing[*]}"
+    sudo pacman -S --needed "${missing[@]}"
+  fi
+
+  if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+    echo "GPU NVIDIA detectada:"
+    nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
+  else
+    echo "Aviso: nvidia-smi não encontrado ou falhou."
+    echo "  O driver NVIDIA pode não estar instalado ou carregado."
+    echo "  A compilação continuará, mas sem suporte a CUDA/GPU."
+  fi
+
+  if [[ ! -d "$LLAMA_DIR" ]]; then
+    echo "Clonando llama.cpp em $LLAMA_DIR..."
+    git clone https://github.com/ggml-org/llama.cpp "$LLAMA_DIR"
+  else
+    echo "Atualizando llama.cpp..."
+    git -C "$LLAMA_DIR" pull
+  fi
+
+  echo "Compilando para Ryzen 7 5700X + RTX 3070 Ti (SM 8.6)..."
+  cmake -S "$LLAMA_DIR" -B "$LLAMA_DIR/build" \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DGGML_CUDA=ON \
+    -DCMAKE_CUDA_ARCHITECTURES=86 \
+    -DGGML_CUDA_FA_ALL_QUANTS=ON \
+    -DGGML_NATIVE=ON \
+    -GNinja
+
+  cmake --build "$LLAMA_DIR/build" --config Release -j"$(nproc)"
+  echo "Concluído: $LLAMA_DIR/build/bin/llama-server"
+}
+
 usage() {
   cat <<EOF
 Uso:
-  llm-server <qwen2_5-coder|qwen3|qwen3_5|gpt-oss> [--host 0.0.0.0] [--port N] [--reasoning] [-- extra llama-server args...]
+  llm-server setup
+  llm-server <qwen2_5-coder|qwen3|qwen3_5|gpt-oss> [--host 0.0.0.0] [--port N] [--reasoning] [--update] [-- extra llama-server args...]
+
+Comandos:
+  setup             clone/update llama.cpp and build with CUDA (RTX 3070 Ti + Ryzen 7 5700X)
 
 Flags:
   --reasoning       enable reasoning/thinking mode (only for compatible models)
@@ -220,22 +281,27 @@ Env overrides (5700X defaults):
   LLAMA_THREADS_BATCH=12
   LLAMA_THREADS_HTTP=4
   LLAMA_PARALLEL=8
+  LLAMA_DIR=$HOME/applications/llama.cpp
 
 Exemplos:
-  llm-server qwen2_5-coder
-  llm-server qwen3_5
-  llm-server qwen3_5 --reasoning
-  LLAMA_PARALLEL=12 llm-server qwen3_5
-  LLAMA_THREADS=10 LLAMA_THREADS_BATCH=16 llm-server qwen2_5-coder
+  llm-server setup
+  llm-server qwen3
+  llm-server qwen3 --update
+  llm-server qwen3 --reasoning
   llm-server qwen2_5-coder --port 8080
   llm-server gpt-oss --host 0.0.0.0 --port 8081
-  llm-server qwen3_5 -- --log-verbosity 4
+  llm-server qwen3 -- --log-verbosity 4
 EOF
 }
 
 if [[ $# -lt 1 ]]; then
   usage
   exit 1
+fi
+
+if [[ "$1" == "setup" ]]; then
+  setup_llama
+  exit 0
 fi
 
 MODEL="$1"
