@@ -112,6 +112,37 @@ declare -A MODEL_PATH=(
   [qwen3_5]="$HOME/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf"
 )
 
+download_model_file() {
+  local repo="$1" file="$2" dest="$3"
+  if command -v huggingface-cli &>/dev/null; then
+    huggingface-cli download "$repo" "$file" --local-dir "$(dirname "$dest")"
+  elif command -v wget &>/dev/null; then
+    wget --continue "https://huggingface.co/$repo/resolve/main/$file" -O "$dest"
+  elif command -v curl &>/dev/null; then
+    curl -L --continue-at - "https://huggingface.co/$repo/resolve/main/$file" -o "$dest"
+  else
+    echo "Erro: instale huggingface-cli, wget ou curl para baixar o modelo"
+    exit 1
+  fi
+}
+
+hf_lfs_sha256() {
+  local repo="$1" file="$2"
+  command -v curl &>/dev/null || return 1
+  command -v python3 &>/dev/null || return 1
+  curl -sf "https://huggingface.co/api/models/$repo/tree/main" \
+    | python3 -c "
+import json, sys
+try:
+    for f in json.load(sys.stdin):
+        if f.get('path') == '$file' and f.get('lfs'):
+            oid = f['lfs']['oid']
+            print(oid.split(':')[-1] if ':' in oid else oid)
+            break
+except: pass
+" 2>/dev/null
+}
+
 ensure_model() {
   local model="$1"
   [[ -z "${MODEL_PATH[$model]+x}" ]] && return 0
@@ -128,17 +159,50 @@ ensure_model() {
   read -r repo file <<< "${MODEL_HF[$model]}"
   echo "Modelo não encontrado. Baixando $file de $repo..."
   mkdir -p "$(dirname "$path")"
+  download_model_file "$repo" "$file" "$path"
 
-  if command -v huggingface-cli &>/dev/null; then
-    huggingface-cli download "$repo" "$file" --local-dir "$(dirname "$path")"
-  elif command -v wget &>/dev/null; then
-    wget --continue "https://huggingface.co/$repo/resolve/main/$file" -O "$path"
-  elif command -v curl &>/dev/null; then
-    curl -L --continue-at - "https://huggingface.co/$repo/resolve/main/$file" -o "$path"
-  else
-    echo "Erro: instale huggingface-cli, wget ou curl para baixar o modelo"
-    exit 1
+  local sha
+  sha=$(hf_lfs_sha256 "$repo" "$file")
+  [[ -n "$sha" ]] && echo "$sha" > "${path}.sha256"
+}
+
+update_model() {
+  local model="$1"
+  [[ -z "${MODEL_PATH[$model]+x}" ]] && return 0
+  [[ -z "${MODEL_HF[$model]+x}" ]] && return 0
+
+  local path="${MODEL_PATH[$model]}"
+  local repo file
+  read -r repo file <<< "${MODEL_HF[$model]}"
+
+  echo "Verificando atualização para $model..."
+  local remote_sha
+  remote_sha=$(hf_lfs_sha256 "$repo" "$file")
+
+  if [[ -z "$remote_sha" ]]; then
+    echo "Aviso: não foi possível verificar versão remota (requer curl e python3)"
+    return 0
   fi
+
+  local local_sha=""
+  [[ -f "${path}.sha256" ]] && local_sha=$(cat "${path}.sha256")
+
+  if [[ "$remote_sha" == "$local_sha" ]]; then
+    echo "$model: já está na versão mais recente (${remote_sha:0:8}...)"
+    return 0
+  fi
+
+  if [[ -n "$local_sha" ]]; then
+    echo "$model: atualização encontrada (${local_sha:0:8}... → ${remote_sha:0:8}...)"
+  else
+    echo "$model: baixando versão mais recente..."
+  fi
+
+  mkdir -p "$(dirname "$path")"
+  [[ -f "$path" ]] && rm "$path"
+  download_model_file "$repo" "$file" "$path"
+  echo "$remote_sha" > "${path}.sha256"
+  echo "$model: atualizado com sucesso"
 }
 
 usage() {
@@ -149,6 +213,7 @@ Uso:
 Flags:
   --reasoning       enable reasoning/thinking mode (only for compatible models)
   --no-reasoning    disable reasoning/thinking mode (default)
+  --update          check for a newer version of the model file and re-download if found
 
 Env overrides (5700X defaults):
   LLAMA_THREADS=8
@@ -181,11 +246,10 @@ if [[ -z "${MODEL_ARGS[$MODEL]+x}" ]]; then
   exit 1
 fi
 
-ensure_model "$MODEL"
-
 HOST="0.0.0.0"
 PORT="${MODEL_PORT[$MODEL]}"
 REASONING=0
+UPDATE=0
 
 # Parse args simples do script; tudo depois de "--" vai direto pro llama-server
 PASSTHRU=()
@@ -207,6 +271,10 @@ while [[ $# -gt 0 ]]; do
     REASONING=0
     shift
     ;;
+  --update)
+    UPDATE=1
+    shift
+    ;;
   --)
     shift
     PASSTHRU+=("$@")
@@ -223,6 +291,12 @@ while [[ $# -gt 0 ]]; do
     ;;
   esac
 done
+
+if [[ $UPDATE -eq 1 ]]; then
+  update_model "$MODEL"
+else
+  ensure_model "$MODEL"
+fi
 
 # Inject --reasoning-budget for models that support it
 REASONING_ARGS=()
