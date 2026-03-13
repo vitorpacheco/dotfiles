@@ -50,6 +50,7 @@ declare -A MODEL_ARGS=(
   [qwen3_5]="
     -m $HOME/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf
     --jinja
+    --reasoning-budget 0
     --ctx-size 8192
     --batch-size 1024
     --ubatch-size 256
