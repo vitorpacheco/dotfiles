@@ -59,6 +59,19 @@ declare -A MODEL_ARGS=(
     --n-gpu-layers auto
   "
 
+  # Qwen3 8B GGUF local (standard transformer, full GPU support)
+  [qwen3]="
+    -m $HOME/models/Qwen3-8B-Q4_K_M.gguf
+    --jinja
+    --ctx-size 8192
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn on
+    --cache-type-k q8_0
+    --cache-type-v q8_0
+    --n-gpu-layers auto
+  "
+
   # GPT-OSS 20B preset (baixa os pesos automaticamente)
   [gpt-oss]="
     --gpt-oss-20b-default
@@ -76,6 +89,7 @@ declare -A MODEL_ARGS=(
 
 declare -A MODEL_PORT=(
   [qwen2_5-coder]=8080
+  [qwen3]=8083
   [qwen3_5]=8082
   [gpt-oss]=8081
 )
@@ -84,15 +98,17 @@ declare -A MODEL_PORT=(
 # Models without an entry (e.g. gpt-oss) are assumed to self-download
 declare -A MODEL_HF=(
   [qwen2_5-coder]="Qwen/Qwen2.5-Coder-7B-Instruct-GGUF Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+  [qwen3]="Qwen/Qwen3-8B-GGUF Qwen3-8B-Q4_K_M.gguf"
   [qwen3_5]="bartowski/Qwen_Qwen3.5-9B-GGUF Qwen_Qwen3.5-9B-Q4_K_M.gguf"
 )
 
 # Models that support reasoning/thinking mode (--reasoning-budget)
-REASONING_MODELS=(qwen3_5)
+REASONING_MODELS=(qwen3 qwen3_5)
 
 # Local path for each model file
 declare -A MODEL_PATH=(
   [qwen2_5-coder]="$HOME/models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+  [qwen3]="$HOME/models/Qwen3-8B-Q4_K_M.gguf"
   [qwen3_5]="$HOME/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf"
 )
 
@@ -128,7 +144,7 @@ ensure_model() {
 usage() {
   cat <<EOF
 Uso:
-  llm-server <qwen2_5-coder|qwen3_5|gpt-oss> [--host 0.0.0.0] [--port N] [--reasoning] [-- extra llama-server args...]
+  llm-server <qwen2_5-coder|qwen3|qwen3_5|gpt-oss> [--host 0.0.0.0] [--port N] [--reasoning] [-- extra llama-server args...]
 
 Flags:
   --reasoning       enable reasoning/thinking mode (only for compatible models)
