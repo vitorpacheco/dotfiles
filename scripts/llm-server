@@ -125,6 +125,8 @@ declare -A MODEL_ARGS=(
   "
 
   # GPT-OSS 20B preset (baixa os pesos automaticamente)
+  # MoE: 20.9B total / 3.6B active params. --cpu-moe keeps expert weights in
+  # RAM while attention layers stay on GPU, optimal for 8GB VRAM.
   [gpt-oss]="
     --gpt-oss-20b-default
     --ctx-size 4096
@@ -133,6 +135,7 @@ declare -A MODEL_ARGS=(
     --flash-attn on
     --cache-type-k q8_0
     --cache-type-v q8_0
+    --cpu-moe
     --fit on
     --fit-target 2048
     --n-gpu-layers auto
