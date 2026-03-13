@@ -22,7 +22,7 @@ LLAMA_PARALLEL="${LLAMA_PARALLEL:-8}"
 
 declare -A MODEL_ARGS=(
   # Qwen2.5 Coder 7B GGUF local
-  [qwen]="
+  [qwen2_5-coder]="
     -m $HOME/models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
     --chat-template chatml
     --jinja
@@ -34,6 +34,19 @@ declare -A MODEL_ARGS=(
     --cache-type-v q8_0
     --fit on
     --fit-target 1536
+    --n-gpu-layers auto
+  "
+
+  # Qwen3.5 9B GGUF local
+  [qwen3_5]="
+    -m $HOME/models/Qwen3.5-9B-Instruct-Q4_K_M.gguf
+    --jinja
+    --ctx-size 8192
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn
+    --cache-type-k q8_0
+    --cache-type-v q8_0
     --n-gpu-layers auto
   "
 
@@ -53,14 +66,57 @@ declare -A MODEL_ARGS=(
 )
 
 declare -A MODEL_PORT=(
-  [qwen]=8080
+  [qwen2_5-coder]=8080
+  [qwen3_5]=8082
   [gpt-oss]=8081
 )
+
+# HuggingFace source for auto-download: "owner/repo filename"
+# Models without an entry (e.g. gpt-oss) are assumed to self-download
+declare -A MODEL_HF=(
+  [qwen2_5-coder]="Qwen/Qwen2.5-Coder-7B-Instruct-GGUF Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+  [qwen3_5]="bartowski/Qwen_Qwen3.5-9B-GGUF Qwen3.5-9B-Instruct-Q4_K_M.gguf"
+)
+
+# Local path for each model file
+declare -A MODEL_PATH=(
+  [qwen2_5-coder]="$HOME/models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf"
+  [qwen3_5]="$HOME/models/Qwen3.5-9B-Instruct-Q4_K_M.gguf"
+)
+
+ensure_model() {
+  local model="$1"
+  [[ -z "${MODEL_PATH[$model]+x}" ]] && return 0
+
+  local path="${MODEL_PATH[$model]}"
+  [[ -f "$path" ]] && return 0
+
+  if [[ -z "${MODEL_HF[$model]+x}" ]]; then
+    echo "Erro: arquivo de modelo não encontrado: $path"
+    exit 1
+  fi
+
+  local repo file
+  read -r repo file <<< "${MODEL_HF[$model]}"
+  echo "Modelo não encontrado. Baixando $file de $repo..."
+  mkdir -p "$(dirname "$path")"
+
+  if command -v huggingface-cli &>/dev/null; then
+    huggingface-cli download "$repo" "$file" --local-dir "$(dirname "$path")"
+  elif command -v wget &>/dev/null; then
+    wget --continue "https://huggingface.co/$repo/resolve/main/$file" -O "$path"
+  elif command -v curl &>/dev/null; then
+    curl -L --continue-at - "https://huggingface.co/$repo/resolve/main/$file" -o "$path"
+  else
+    echo "Erro: instale huggingface-cli, wget ou curl para baixar o modelo"
+    exit 1
+  fi
+}
 
 usage() {
   cat <<EOF
 Uso:
-  llm-server <qwen|gpt-oss> [--host 0.0.0.0] [--port N] [-- extra llama-server args...]
+  llm-server <qwen2_5-coder|qwen3_5|gpt-oss> [--host 0.0.0.0] [--port N] [-- extra llama-server args...]
 
 Env overrides (5700X defaults):
   LLAMA_THREADS=8
@@ -69,12 +125,13 @@ Env overrides (5700X defaults):
   LLAMA_PARALLEL=8
 
 Exemplos:
-  llm-server qwen
-  LLAMA_PARALLEL=12 llm-server qwen
-  LLAMA_THREADS=10 LLAMA_THREADS_BATCH=16 llm-server qwen
-  llm-server qwen --port 8080
+  llm-server qwen2_5-coder
+  llm-server qwen3_5
+  LLAMA_PARALLEL=12 llm-server qwen3_5
+  LLAMA_THREADS=10 LLAMA_THREADS_BATCH=16 llm-server qwen2_5-coder
+  llm-server qwen2_5-coder --port 8080
   llm-server gpt-oss --host 0.0.0.0 --port 8081
-  llm-server qwen -- --log-verbosity 4
+  llm-server qwen3_5 -- --log-verbosity 4
 EOF
 }
 
@@ -90,6 +147,8 @@ if [[ -z "${MODEL_ARGS[$MODEL]+x}" ]]; then
   usage
   exit 1
 fi
+
+ensure_model "$MODEL"
 
 HOST="0.0.0.0"
 PORT="${MODEL_PORT[$MODEL]}"
