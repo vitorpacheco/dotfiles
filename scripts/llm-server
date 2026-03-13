@@ -135,7 +135,8 @@ download_model_file() {
 hf_lfs_sha256() {
   local repo="$1" file="$2"
   command -v python3 &>/dev/null || return 1
-  local url="https://huggingface.co/api/models/$repo/tree/main"
+  # limit=100 avoids pagination for large repos with many quant files
+  local url="https://huggingface.co/api/models/$repo/tree/main?limit=100"
   local json
   if command -v curl &>/dev/null; then
     json=$(curl -sf "$url") || return 1
@@ -386,9 +387,8 @@ done
 
 if [[ $UPDATE -eq 1 ]]; then
   update_model "$MODEL"
-else
-  ensure_model "$MODEL"
 fi
+ensure_model "$MODEL"
 
 # Inject --reasoning-budget for models that support it
 REASONING_ARGS=()
