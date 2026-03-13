@@ -249,12 +249,38 @@ setup_llama() {
     git -C "$LLAMA_DIR" pull
   fi
 
+  # Locate CUDA toolkit (Arch installs to /opt/cuda, not in PATH by default)
+  local cuda_root=""
+  if command -v nvcc &>/dev/null; then
+    cuda_root="$(dirname "$(dirname "$(command -v nvcc)")")"
+  else
+    for candidate in /opt/cuda /usr/local/cuda /usr/lib/cuda; do
+      if [[ -x "$candidate/bin/nvcc" ]]; then
+        cuda_root="$candidate"
+        break
+      fi
+    done
+  fi
+
+  local cuda_flags=()
+  if [[ -n "$cuda_root" ]]; then
+    echo "CUDA toolkit encontrado em: $cuda_root"
+    cuda_flags=(
+      -DGGML_CUDA=ON
+      -DCUDAToolkit_ROOT="$cuda_root"
+      -DCMAKE_CUDA_COMPILER="$cuda_root/bin/nvcc"
+      -DCMAKE_CUDA_ARCHITECTURES=86
+      -DGGML_CUDA_FA_ALL_QUANTS=ON
+    )
+  else
+    echo "Aviso: CUDA toolkit (nvcc) não encontrado. Compilando sem suporte a GPU."
+    echo "  Instale o pacote 'cuda' e tente novamente: sudo pacman -S cuda"
+  fi
+
   echo "Compilando para Ryzen 7 5700X + RTX 3070 Ti (SM 8.6)..."
   cmake -S "$LLAMA_DIR" -B "$LLAMA_DIR/build" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DGGML_CUDA=ON \
-    -DCMAKE_CUDA_ARCHITECTURES=86 \
-    -DGGML_CUDA_FA_ALL_QUANTS=ON \
+    "${cuda_flags[@]}" \
     -DGGML_NATIVE=ON \
     -GNinja
 
