@@ -49,6 +49,10 @@
 #     MODEL_DRAFT_HF   — "owner/repo filename" for the draft model
 #   For reasoning mode support, add the model name to REASONING_MODELS.
 # =============================================================================
+# Ensure standard utilities are available (dirname, mkdir, etc.)
+# This is needed when the script runs in restricted PATH environments
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
 set -euo pipefail
 
 LLAMA_DIR="${LLAMA_DIR:-$HOME/applications/llama.cpp}"
@@ -246,46 +250,46 @@ ensure_model() {
   local model="$1"
   [[ -z "${MODEL_PATH[$model]+x}" ]] && return 0
 
-  local path="${MODEL_PATH[$model]}"
-  [[ -f "$path" ]] && return 0
+  local model_path="${MODEL_PATH[$model]}"
+  [[ -f "$model_path" ]] && return 0
 
   if [[ -z "${MODEL_HF[$model]+x}" ]]; then
-    echo "Error: model file not found: $path"
+    echo "Error: model file not found: $model_path"
     exit 1
   fi
 
   local repo file
   read -r repo file <<< "${MODEL_HF[$model]}"
   echo "Model not found. Downloading $file from $repo..."
-  mkdir -p "$(dirname "$path")"
-  download_model_file "$repo" "$file" "$path"
+  mkdir -p "$(dirname "$model_path")"
+  download_model_file "$repo" "$file" "$model_path"
 
   local sha
   sha=$(hf_lfs_sha256 "$repo" "$file")
-  [[ -n "$sha" ]] && echo "$sha" > "${path}.sha256"
+  [[ -n "$sha" ]] && echo "$sha" > "${model_path}.sha256"
 }
 
 ensure_draft_model() {
   local model="$1"
   [[ -z "${MODEL_DRAFT_PATH[$model]+x}" ]] && return 0
 
-  local path="${MODEL_DRAFT_PATH[$model]}"
-  [[ -f "$path" ]] && return 0
+  local draft_path="${MODEL_DRAFT_PATH[$model]}"
+  [[ -f "$draft_path" ]] && return 0
 
   if [[ -z "${MODEL_DRAFT_HF[$model]+x}" ]]; then
-    echo "Error: draft model not found: $path"
+    echo "Error: draft model not found: $draft_path"
     exit 1
   fi
 
   local repo file
   read -r repo file <<< "${MODEL_DRAFT_HF[$model]}"
   echo "Draft model not found. Downloading $file from $repo..."
-  mkdir -p "$(dirname "$path")"
-  download_model_file "$repo" "$file" "$path"
+  mkdir -p "$(dirname "$draft_path")"
+  download_model_file "$repo" "$file" "$draft_path"
 
   local sha
   sha=$(hf_lfs_sha256 "$repo" "$file")
-  [[ -n "$sha" ]] && echo "$sha" > "${path}.sha256"
+  [[ -n "$sha" ]] && echo "$sha" > "${draft_path}.sha256"
 }
 
 update_model() {
@@ -293,7 +297,7 @@ update_model() {
   [[ -z "${MODEL_PATH[$model]+x}" ]] && return 0
   [[ -z "${MODEL_HF[$model]+x}" ]] && return 0
 
-  local path="${MODEL_PATH[$model]}"
+  local model_file="${MODEL_PATH[$model]}"
   local repo file
   read -r repo file <<< "${MODEL_HF[$model]}"
 
@@ -307,7 +311,7 @@ update_model() {
   fi
 
   local local_sha=""
-  [[ -f "${path}.sha256" ]] && local_sha=$(cat "${path}.sha256")
+  [[ -f "${model_file}.sha256" ]] && local_sha=$(cat "${model_file}.sha256")
 
   if [[ "$remote_sha" == "$local_sha" ]]; then
     echo "$model: already up to date (${remote_sha:0:8}...)"
@@ -320,10 +324,10 @@ update_model() {
     echo "$model: downloading latest version..."
   fi
 
-  mkdir -p "$(dirname "$path")"
-  [[ -f "$path" ]] && rm "$path"
-  download_model_file "$repo" "$file" "$path"
-  echo "$remote_sha" > "${path}.sha256"
+  mkdir -p "$(dirname "$model_file")"
+  [[ -f "$model_file" ]] && rm "$model_file"
+  download_model_file "$repo" "$file" "$model_file"
+  echo "$remote_sha" > "${model_file}.sha256"
   echo "$model: updated successfully"
 }
 
