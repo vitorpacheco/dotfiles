@@ -61,8 +61,8 @@ if [[ "${1:-}" != "setup" ]]; then
   elif [[ -x "$LLAMA_DIR/build/bin/llama-server" ]]; then
     LLAMA_SERVER="$LLAMA_DIR/build/bin/llama-server"
   else
-    echo "Erro: llama-server não encontrado (PATH, $LLAMA_DIR/build/bin/, ou \$LLAMA_SERVER)"
-    echo "Dica: rode 'llm-server setup' para compilar do zero"
+    echo "Error: llama-server not found (PATH, $LLAMA_DIR/build/bin/, or \$LLAMA_SERVER)"
+    echo "Hint: run 'llm-server setup' to build from source"
     exit 1
   fi
 fi
@@ -78,7 +78,7 @@ LLAMA_THREADS_HTTP="${LLAMA_THREADS_HTTP:-4}"
 LLAMA_PARALLEL="${LLAMA_PARALLEL:-8}"
 
 # ----------------------------
-# Model registry (adicione/remova aqui)
+# Model registry
 # ----------------------------
 
 declare -A MODEL_ARGS=(
@@ -124,7 +124,24 @@ declare -A MODEL_ARGS=(
     --n-gpu-layers auto
   "
 
-  # GPT-OSS 20B preset (baixa os pesos automaticamente)
+  # Nemotron-3-Nano 30B MoE (3B active params, hybrid Mamba-2 + attention)
+  # --cpu-moe keeps MoE expert weights in RAM; attention layers on GPU.
+  # Supports thinking/reasoning mode via chat template flag.
+  [nemotron-nano]="
+    -m $HOME/models/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf
+    --jinja
+    --ctx-size 4096
+    --parallel 2
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn on
+    --cache-type-k q8_0
+    --cache-type-v q8_0
+    --cpu-moe
+    --n-gpu-layers auto
+  "
+
+  # GPT-OSS 20B preset (downloads weights automatically)
   # MoE: 20.9B total / 3.6B active params. --cpu-moe keeps expert weights in
   # RAM while attention layers stay on GPU, optimal for 8GB VRAM.
   [gpt-oss]="
@@ -142,10 +159,11 @@ declare -A MODEL_ARGS=(
 )
 
 declare -A MODEL_PORT=(
-  [qwen2_5-coder]=8080
-  [qwen3]=8083
-  [qwen3_5]=8082
-  [gpt-oss]=8081
+  [qwen2_5-coder]=8084
+  [qwen3]=8084
+  [qwen3_5]=8084
+  [gpt-oss]=8084
+  [nemotron-nano]=8084
 )
 
 # HuggingFace source for auto-download: "owner/repo filename"
@@ -154,16 +172,18 @@ declare -A MODEL_HF=(
   [qwen2_5-coder]="Qwen/Qwen2.5-Coder-7B-Instruct-GGUF qwen2.5-coder-7b-instruct-q4_k_m.gguf"
   [qwen3]="Qwen/Qwen3-8B-GGUF Qwen3-8B-Q4_K_M.gguf"
   [qwen3_5]="bartowski/Qwen_Qwen3.5-9B-GGUF Qwen_Qwen3.5-9B-Q4_K_M.gguf"
+  [nemotron-nano]="bartowski/nvidia_Nemotron-3-Nano-30B-A3B-GGUF nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
 )
 
 # Models that support reasoning/thinking mode (--reasoning-budget)
-REASONING_MODELS=(qwen3 qwen3_5 gpt-oss)
+REASONING_MODELS=(qwen3 qwen3_5 gpt-oss nemotron-nano)
 
 # Local path for each model file
 declare -A MODEL_PATH=(
   [qwen2_5-coder]="$HOME/models/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
   [qwen3]="$HOME/models/Qwen3-8B-Q4_K_M.gguf"
   [qwen3_5]="$HOME/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf"
+  [nemotron-nano]="$HOME/models/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
 )
 
 # Draft models for speculative decoding (must share tokenizer with the target)
@@ -191,7 +211,7 @@ download_model_file() {
   elif command -v curl &>/dev/null; then
     curl -L --continue-at - "https://huggingface.co/$repo/resolve/main/$file" -o "$dest"
   else
-    echo "Erro: instale huggingface-cli, wget ou curl para baixar o modelo"
+    echo "Error: install huggingface-cli, wget, or curl to download models"
     exit 1
   fi
 }
@@ -229,13 +249,13 @@ ensure_model() {
   [[ -f "$path" ]] && return 0
 
   if [[ -z "${MODEL_HF[$model]+x}" ]]; then
-    echo "Erro: arquivo de modelo não encontrado: $path"
+    echo "Error: model file not found: $path"
     exit 1
   fi
 
   local repo file
   read -r repo file <<< "${MODEL_HF[$model]}"
-  echo "Modelo não encontrado. Baixando $file de $repo..."
+  echo "Model not found. Downloading $file from $repo..."
   mkdir -p "$(dirname "$path")"
   download_model_file "$repo" "$file" "$path"
 
@@ -252,13 +272,13 @@ ensure_draft_model() {
   [[ -f "$path" ]] && return 0
 
   if [[ -z "${MODEL_DRAFT_HF[$model]+x}" ]]; then
-    echo "Erro: draft model não encontrado: $path"
+    echo "Error: draft model not found: $path"
     exit 1
   fi
 
   local repo file
   read -r repo file <<< "${MODEL_DRAFT_HF[$model]}"
-  echo "Draft model não encontrado. Baixando $file de $repo..."
+  echo "Draft model not found. Downloading $file from $repo..."
   mkdir -p "$(dirname "$path")"
   download_model_file "$repo" "$file" "$path"
 
@@ -276,12 +296,12 @@ update_model() {
   local repo file
   read -r repo file <<< "${MODEL_HF[$model]}"
 
-  echo "Verificando atualização para $model..."
+  echo "Checking for updates to $model..."
   local remote_sha
   remote_sha=$(hf_lfs_sha256 "$repo" "$file")
 
   if [[ -z "$remote_sha" ]]; then
-    echo "Aviso: não foi possível verificar versão remota (requer curl e python3)"
+    echo "Warning: could not check remote version (requires curl and python3)"
     return 0
   fi
 
@@ -289,21 +309,21 @@ update_model() {
   [[ -f "${path}.sha256" ]] && local_sha=$(cat "${path}.sha256")
 
   if [[ "$remote_sha" == "$local_sha" ]]; then
-    echo "$model: já está na versão mais recente (${remote_sha:0:8}...)"
+    echo "$model: already up to date (${remote_sha:0:8}...)"
     return 0
   fi
 
   if [[ -n "$local_sha" ]]; then
-    echo "$model: atualização encontrada (${local_sha:0:8}... → ${remote_sha:0:8}...)"
+    echo "$model: update found (${local_sha:0:8}... -> ${remote_sha:0:8}...)"
   else
-    echo "$model: baixando versão mais recente..."
+    echo "$model: downloading latest version..."
   fi
 
   mkdir -p "$(dirname "$path")"
   [[ -f "$path" ]] && rm "$path"
   download_model_file "$repo" "$file" "$path"
   echo "$remote_sha" > "${path}.sha256"
-  echo "$model: atualizado com sucesso"
+  echo "$model: updated successfully"
 }
 
 # =============================================================================
@@ -323,7 +343,7 @@ _bench_http() {
 
 _bench_wait() {
   local base_url="$1"
-  echo -n "  Aguardando servidor"
+  echo -n "  Waiting for server"
   for _ in $(seq 1 90); do
     local r
     if command -v curl &>/dev/null; then
@@ -379,7 +399,7 @@ benchmark_model() {
   local n_predict="${BENCH_N_PREDICT:-256}"
 
   if [[ -z "${MODEL_ARGS[$model]+x}" ]]; then
-    echo "Modelo inválido: $model"; usage; exit 1
+    echo "Invalid model: $model"; usage; exit 1
   fi
 
   ensure_model "$model"
@@ -396,11 +416,11 @@ benchmark_model() {
 
   echo ""
   echo "=== Benchmark: $model ==="
-  echo "    $n requisições × $n_predict tokens"
+  echo "    $n requests x $n_predict tokens"
 
   # --- baseline ---
   echo ""
-  echo "[ 1/$total_runs ] Baseline (sem draft)"
+  echo "[ 1/$total_runs ] Baseline (no draft)"
   local server_pid
   # shellcheck disable=SC2086
   "$LLAMA_SERVER" \
@@ -418,7 +438,7 @@ benchmark_model() {
 
   local baseline
   baseline=$(_bench_run "$base_url" "$n" "$n_predict")
-  echo "  Resultado: $baseline"
+  echo "  Result: $baseline"
   kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null
 
   # --- speculative decoding ---
@@ -427,7 +447,7 @@ benchmark_model() {
     local draft_path="${MODEL_DRAFT_PATH[$model]}"
 
     echo ""
-    echo "[ 2/2 ] Com draft model ($(basename "$draft_path"))"
+    echo "[ 2/2 ] With draft model ($(basename "$draft_path"))"
     # shellcheck disable=SC2086
     "$LLAMA_SERVER" \
       --host 127.0.0.1 --port "$port" \
@@ -445,7 +465,7 @@ benchmark_model() {
 
     local draft_result
     draft_result=$(_bench_run "$base_url" "$n" "$n_predict")
-    echo "  Resultado: $draft_result"
+    echo "  Result: $draft_result"
     kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null
 
     python3 -c "
@@ -476,24 +496,24 @@ setup_llama() {
   command -v gcc &>/dev/null || missing+=(base-devel)
 
   if [[ ${#missing[@]} -gt 0 ]]; then
-    echo "Pacotes necessários não encontrados: ${missing[*]}"
+    echo "Required packages not found: ${missing[*]}"
     sudo pacman -S --needed "${missing[@]}"
   fi
 
   if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
-    echo "GPU NVIDIA detectada:"
+    echo "NVIDIA GPU detected:"
     nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
   else
-    echo "Aviso: nvidia-smi não encontrado ou falhou."
-    echo "  O driver NVIDIA pode não estar instalado ou carregado."
-    echo "  A compilação continuará, mas sem suporte a CUDA/GPU."
+    echo "Warning: nvidia-smi not found or failed."
+    echo "  The NVIDIA driver may not be installed or loaded."
+    echo "  Build will continue without CUDA/GPU support."
   fi
 
   if [[ ! -d "$LLAMA_DIR" ]]; then
-    echo "Clonando llama.cpp em $LLAMA_DIR..."
+    echo "Cloning llama.cpp into $LLAMA_DIR..."
     git clone https://github.com/ggml-org/llama.cpp "$LLAMA_DIR"
   else
-    echo "Atualizando llama.cpp..."
+    echo "Updating llama.cpp..."
     git -C "$LLAMA_DIR" pull
   fi
 
@@ -512,7 +532,7 @@ setup_llama() {
 
   local cuda_flags=()
   if [[ -n "$cuda_root" ]]; then
-    echo "CUDA toolkit encontrado em: $cuda_root"
+    echo "CUDA toolkit found at: $cuda_root"
     cuda_flags=(
       -DGGML_CUDA=ON
       -DCUDAToolkit_ROOT="$cuda_root"
@@ -521,11 +541,11 @@ setup_llama() {
       -DGGML_CUDA_FA_ALL_QUANTS=ON
     )
   else
-    echo "Aviso: CUDA toolkit (nvcc) não encontrado. Compilando sem suporte a GPU."
-    echo "  Instale o pacote 'cuda' e tente novamente: sudo pacman -S cuda"
+    echo "Warning: CUDA toolkit (nvcc) not found. Building without GPU support."
+    echo "  Install the 'cuda' package and try again: sudo pacman -S cuda"
   fi
 
-  echo "Compilando para Ryzen 7 5700X + RTX 3070 Ti (SM 8.6)..."
+  echo "Building for Ryzen 7 5700X + RTX 3070 Ti (SM 8.6)..."
   cmake -S "$LLAMA_DIR" -B "$LLAMA_DIR/build" \
     -DCMAKE_BUILD_TYPE=Release \
     "${cuda_flags[@]}" \
@@ -533,7 +553,7 @@ setup_llama() {
     -GNinja
 
   cmake --build "$LLAMA_DIR/build" --config Release -j"$(nproc)"
-  echo "Concluído: $LLAMA_DIR/build/bin/llama-server"
+  echo "Done: $LLAMA_DIR/build/bin/llama-server"
 }
 
 # =============================================================================
@@ -542,14 +562,14 @@ setup_llama() {
 
 usage() {
   cat <<EOF
-Uso:
+Usage:
   llm-server setup
   llm-server benchmark <model>
   llm-server <model> [flags] [-- extra llama-server args...]
 
-Modelos: qwen2_5-coder | qwen3 | qwen3_5 | gpt-oss
+Models: qwen2_5-coder | qwen3 | qwen3_5 | gpt-oss | nemotron-nano
 
-Comandos:
+Commands:
   setup               clone/update llama.cpp and build with CUDA (RTX 3070 Ti + 5700X)
   benchmark <model>   measure throughput with and without speculative decoding
 
@@ -560,7 +580,7 @@ Flags:
   --no-draft          disable speculative decoding (default)
   --update            check for a newer GGUF on HuggingFace and re-download if found
   --host HOST         bind address (default: 0.0.0.0)
-  --port N            override default port
+  --port N            override default port (default: 8084)
 
 Env overrides (5700X defaults):
   LLAMA_THREADS=8       LLAMA_THREADS_BATCH=12
@@ -568,14 +588,14 @@ Env overrides (5700X defaults):
   LLAMA_DIR=$HOME/applications/llama.cpp
   BENCH_REQUESTS=10     BENCH_N_PREDICT=256
 
-Exemplos:
+Examples:
   llm-server setup
   llm-server benchmark qwen3
   llm-server qwen3
   llm-server qwen3 --draft
   llm-server qwen3 --reasoning
   llm-server qwen3 --update
-  llm-server qwen2_5-coder --port 8080
+  llm-server qwen2_5-coder --port 9000
   llm-server qwen3 -- --log-verbosity 4
 EOF
 }
@@ -593,14 +613,14 @@ if [[ "$1" == "setup" ]]; then
 fi
 
 if [[ "$1" == "benchmark" ]]; then
-  [[ $# -lt 2 ]] && { echo "Uso: llm-server benchmark <model>"; exit 1; }
+  [[ $# -lt 2 ]] && { echo "Usage: llm-server benchmark <model>"; exit 1; }
   benchmark_model "$2"; exit 0
 fi
 
 MODEL="$1"
 shift
 if [[ -z "${MODEL_ARGS[$MODEL]+x}" ]]; then
-  echo "Modelo inválido: $MODEL"; usage; exit 1
+  echo "Invalid model: $MODEL"; usage; exit 1
 fi
 
 HOST="0.0.0.0"
@@ -622,7 +642,7 @@ while [[ $# -gt 0 ]]; do
   --update)       UPDATE=1;     shift   ;;
   --)             shift; PASSTHRU+=("$@"); break ;;
   -h|--help)      usage; exit 0 ;;
-  *)              echo "Arg desconhecido: $1"; usage; exit 1 ;;
+  *)              echo "Unknown argument: $1"; usage; exit 1 ;;
   esac
 done
 
@@ -644,8 +664,25 @@ if [[ $DRAFT -eq 1 ]]; then
     ensure_draft_model "$MODEL"
     DRAFT_ARGS=(--model-draft "${MODEL_DRAFT_PATH[$MODEL]}")
   else
-    echo "Aviso: nenhum draft model configurado para $MODEL, ignorando --draft"
+    echo "Warning: no draft model configured for $MODEL, ignoring --draft"
   fi
+fi
+
+# Check for existing process on the port
+existing_pid=""
+if command -v ss &>/dev/null; then
+  existing_pid=$(ss -tlnp "sport = :$PORT" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1)
+elif command -v lsof &>/dev/null; then
+  existing_pid=$(lsof -ti ":$PORT" 2>/dev/null | head -1)
+fi
+
+if [[ -n "$existing_pid" ]]; then
+  echo "Port $PORT is already in use by PID $existing_pid ($(ps -p "$existing_pid" -o comm= 2>/dev/null || echo unknown))."
+  read -r -p "Kill it and continue? [y/N] " _answer
+  case "$_answer" in
+    [yY]*) kill "$existing_pid" && echo "Killed PID $existing_pid." || { echo "Failed to kill PID $existing_pid."; exit 1; } ;;
+    *) echo "Cancelled."; exit 0 ;;
+  esac
 fi
 
 # Launch
