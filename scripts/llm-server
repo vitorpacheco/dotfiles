@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/env zsh
 # =============================================================================
 # llm-server — local LLM server launcher built on top of llama.cpp
 #
@@ -707,7 +707,8 @@ fi
 
 if [[ -n "$existing_pid" ]]; then
   echo "Port $PORT is already in use by PID $existing_pid ($(ps -p "$existing_pid" -o comm= 2>/dev/null || echo unknown))."
-  read -r -p "Kill it and continue? [y/N] " _answer
+  printf "Kill it and continue? [y/N] "
+  read -r _answer
   case "$_answer" in
     [yY]*) kill "$existing_pid" && echo "Killed PID $existing_pid." || { echo "Failed to kill PID $existing_pid."; exit 1; } ;;
     *) echo "Cancelled."; exit 0 ;;
