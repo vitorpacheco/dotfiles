@@ -3,10 +3,11 @@
 # llm-server — local LLM server launcher built on top of llama.cpp
 #
 # COMMANDS
-#   setup               Clone/update llama.cpp and build it with CUDA support.
-#                       Checks for required pacman packages, detects the CUDA
-#                       toolkit, and compiles with flags tuned for this machine
-#                       (Ryzen 7 5700X + RTX 3070 Ti, SM 8.6).
+#   setup               Clone/update llama.cpp and build it with GPU support.
+#                       On Linux: checks pacman packages, detects CUDA, compiles
+#                       for Ryzen 7 5700X + RTX 3070 Ti (SM 8.6).
+#                       On macOS: checks Homebrew packages, builds with Metal
+#                       (Apple Silicon GPU acceleration).
 #
 #   benchmark <model>   Measure inference throughput (t/s) for a model.
 #                       Starts a temporary server, runs a fixed prompt N times,
@@ -487,20 +488,42 @@ if b > 0 and d > 0:
 # =============================================================================
 
 setup_llama() {
-  local build_deps=(git cmake ninja cuda)
-  local missing=()
-  for pkg in "${build_deps[@]}"; do
-    pacman -Q "$pkg" &>/dev/null || missing+=("$pkg")
-  done
-  # base-devel proxy check
-  command -v gcc &>/dev/null || missing+=(base-devel)
+  local os
+  os=$(uname -s)
+  local ncpu
+  ncpu=$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
 
-  if [[ ${#missing[@]} -gt 0 ]]; then
-    echo "Required packages not found: ${missing[*]}"
-    sudo pacman -S --needed "${missing[@]}"
+  # --- package check ---
+  local missing=()
+  if [[ "$os" == "Darwin" ]]; then
+    if ! command -v brew &>/dev/null; then
+      echo "Error: Homebrew not found. Install it from https://brew.sh"
+      exit 1
+    fi
+    for pkg in git cmake ninja; do
+      brew list "$pkg" &>/dev/null || missing+=("$pkg")
+    done
+    command -v gcc &>/dev/null || missing+=(gcc)
+    if [[ ${#missing[@]} -gt 0 ]]; then
+      echo "Required packages not found: ${missing[*]}"
+      brew install "${missing[@]}"
+    fi
+  else
+    for pkg in git cmake ninja cuda; do
+      pacman -Q "$pkg" &>/dev/null || missing+=("$pkg")
+    done
+    command -v gcc &>/dev/null || missing+=(base-devel)
+    if [[ ${#missing[@]} -gt 0 ]]; then
+      echo "Required packages not found: ${missing[*]}"
+      sudo pacman -S --needed "${missing[@]}"
+    fi
   fi
 
-  if command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+  # --- GPU info ---
+  if [[ "$os" == "Darwin" ]]; then
+    echo "Apple Silicon detected — Metal GPU acceleration will be used."
+    system_profiler SPDisplaysDataType 2>/dev/null | grep -E "Chipset Model|VRAM" || true
+  elif command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
     echo "NVIDIA GPU detected:"
     nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
   else
@@ -509,6 +532,7 @@ setup_llama() {
     echo "  Build will continue without CUDA/GPU support."
   fi
 
+  # --- clone / update ---
   if [[ ! -d "$LLAMA_DIR" ]]; then
     echo "Cloning llama.cpp into $LLAMA_DIR..."
     git clone https://github.com/ggml-org/llama.cpp "$LLAMA_DIR"
@@ -517,42 +541,47 @@ setup_llama() {
     git -C "$LLAMA_DIR" pull
   fi
 
-  # Locate CUDA toolkit (Arch installs to /opt/cuda, not in PATH by default)
-  local cuda_root=""
-  if command -v nvcc &>/dev/null; then
-    cuda_root="$(dirname "$(dirname "$(command -v nvcc)")")"
+  # --- build flags ---
+  local gpu_flags=()
+  if [[ "$os" == "Darwin" ]]; then
+    echo "Building for Apple Silicon (Metal)..."
+    gpu_flags=(-DGGML_METAL=ON -DCMAKE_OSX_ARCHITECTURES=arm64)
   else
-    for candidate in /opt/cuda /usr/local/cuda /usr/lib/cuda; do
-      if [[ -x "$candidate/bin/nvcc" ]]; then
-        cuda_root="$candidate"
-        break
-      fi
-    done
+    # Locate CUDA toolkit (Arch installs to /opt/cuda, not in PATH by default)
+    local cuda_root=""
+    if command -v nvcc &>/dev/null; then
+      cuda_root="$(dirname "$(dirname "$(command -v nvcc)")")"
+    else
+      for candidate in /opt/cuda /usr/local/cuda /usr/lib/cuda; do
+        if [[ -x "$candidate/bin/nvcc" ]]; then
+          cuda_root="$candidate"; break
+        fi
+      done
+    fi
+
+    if [[ -n "$cuda_root" ]]; then
+      echo "CUDA toolkit found at: $cuda_root"
+      echo "Building for Ryzen 7 5700X + RTX 3070 Ti (SM 8.6)..."
+      gpu_flags=(
+        -DGGML_CUDA=ON
+        -DCUDAToolkit_ROOT="$cuda_root"
+        -DCMAKE_CUDA_COMPILER="$cuda_root/bin/nvcc"
+        -DCMAKE_CUDA_ARCHITECTURES=86
+        -DGGML_CUDA_FA_ALL_QUANTS=ON
+      )
+    else
+      echo "Warning: CUDA toolkit (nvcc) not found. Building without GPU support."
+      echo "  Install the 'cuda' package and try again: sudo pacman -S cuda"
+    fi
   fi
 
-  local cuda_flags=()
-  if [[ -n "$cuda_root" ]]; then
-    echo "CUDA toolkit found at: $cuda_root"
-    cuda_flags=(
-      -DGGML_CUDA=ON
-      -DCUDAToolkit_ROOT="$cuda_root"
-      -DCMAKE_CUDA_COMPILER="$cuda_root/bin/nvcc"
-      -DCMAKE_CUDA_ARCHITECTURES=86
-      -DGGML_CUDA_FA_ALL_QUANTS=ON
-    )
-  else
-    echo "Warning: CUDA toolkit (nvcc) not found. Building without GPU support."
-    echo "  Install the 'cuda' package and try again: sudo pacman -S cuda"
-  fi
-
-  echo "Building for Ryzen 7 5700X + RTX 3070 Ti (SM 8.6)..."
   cmake -S "$LLAMA_DIR" -B "$LLAMA_DIR/build" \
     -DCMAKE_BUILD_TYPE=Release \
-    "${cuda_flags[@]}" \
+    "${gpu_flags[@]}" \
     -DGGML_NATIVE=ON \
     -GNinja
 
-  cmake --build "$LLAMA_DIR/build" --config Release -j"$(nproc)"
+  cmake --build "$LLAMA_DIR/build" --config Release -j"$ncpu"
   echo "Done: $LLAMA_DIR/build/bin/llama-server"
 }
 
