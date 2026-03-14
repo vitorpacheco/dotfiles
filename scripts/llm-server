@@ -428,7 +428,7 @@ benchmark_model() {
     --threads "$LLAMA_THREADS" --threads-batch "$LLAMA_THREADS_BATCH" \
     --threads-http "$LLAMA_THREADS_HTTP" --parallel 1 \
     --log-disable \
-    ${MODEL_ARGS[$model]} \
+    ${=MODEL_ARGS[$model]} \
     --host 127.0.0.1 --port "$port" \
     "${reasoning_args[@]}" > /dev/null 2>&1 &
   server_pid=$!
@@ -456,7 +456,7 @@ benchmark_model() {
       --threads-http "$LLAMA_THREADS_HTTP" --parallel 1 \
       --log-disable \
       --model-draft "$draft_path" \
-      ${MODEL_ARGS[$model]} \
+      ${=MODEL_ARGS[$model]} \
       "${reasoning_args[@]}" > /dev/null 2>&1 &
     server_pid=$!
 
@@ -722,7 +722,7 @@ exec "$LLAMA_SERVER" \
   --threads-batch "$LLAMA_THREADS_BATCH" \
   --threads-http "$LLAMA_THREADS_HTTP" \
   --parallel "$LLAMA_PARALLEL" \
-  ${MODEL_ARGS[$MODEL]} \
+  ${=MODEL_ARGS[$MODEL]} \
   "${REASONING_ARGS[@]}" \
   "${DRAFT_ARGS[@]}" \
   --host "$HOST" \
