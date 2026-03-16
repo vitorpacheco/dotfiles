@@ -38,6 +38,11 @@
 #   LLAMA_DIR               path to the llama.cpp checkout
 #   LLAMA_SERVER            override the llama-server binary path
 #
+# CONFIGURATION FILE
+#   Settings can be configured in ~/.config/llm-server/config.conf
+#   Run 'llm-server setup' to create the default config file.
+#   Precedence: Environment variables > Config file > Hardcoded defaults
+#
 # MODEL REGISTRY
 #   To add a new model, add entries to:
 #     MODEL_ARGS    — llama-server flags (must include -m <path>)
@@ -55,7 +60,54 @@ export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 
 set -euo pipefail
 
-LLAMA_DIR="${LLAMA_DIR:-$HOME/applications/llama.cpp}"
+# =============================================================================
+# Configuration file handling
+# =============================================================================
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/llm-server"
+CONFIG_FILE="$CONFIG_DIR/config.conf"
+
+# Default configuration values
+DEFAULT_LLAMA_DIR="$HOME/applications/llama.cpp"
+DEFAULT_MODELS_DIR="$HOME/models"
+DEFAULT_HOST="0.0.0.0"
+DEFAULT_PORT="8084"
+DEFAULT_THREADS="8"
+DEFAULT_THREADS_BATCH="12"
+DEFAULT_THREADS_HTTP="4"
+DEFAULT_PARALLEL="8"
+DEFAULT_BENCH_REQUESTS="10"
+DEFAULT_BENCH_N_PREDICT="256"
+
+# Load configuration from shell-compatible .conf file
+# Config file uses simple KEY=VALUE format with variable expansion
+load_config() {
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    return 0
+  fi
+
+  # Source the config file to load variables
+  # This allows shell variable expansion like $HOME
+  set -a
+  source "$CONFIG_FILE" 2>/dev/null || true
+  set +a
+}
+
+# Initialize config values (call this after defining the function)
+load_config
+
+# Use config values if available, otherwise use defaults
+# Environment variables override config values
+LLAMA_DIR="${LLAMA_DIR:-${LLAMA_CPP:-$DEFAULT_LLAMA_DIR}}"
+MODELS_DIR="${MODELS_DIR:-${MODELS:-$DEFAULT_MODELS_DIR}}"
+SERVER_HOST="${SERVER_HOST:-${HOST:-$DEFAULT_HOST}}"
+SERVER_PORT="${SERVER_PORT:-${PORT:-$DEFAULT_PORT}}"
+LLAMA_THREADS="${LLAMA_THREADS:-${THREADS:-$DEFAULT_THREADS}}"
+LLAMA_THREADS_BATCH="${LLAMA_THREADS_BATCH:-${THREADS_BATCH:-$DEFAULT_THREADS_BATCH}}"
+LLAMA_THREADS_HTTP="${LLAMA_THREADS_HTTP:-${THREADS_HTTP:-$DEFAULT_THREADS_HTTP}}"
+LLAMA_PARALLEL="${LLAMA_PARALLEL:-${PARALLEL:-$DEFAULT_PARALLEL}}"
+BENCH_REQUESTS="${BENCH_REQUESTS:-${BENCH_REQUESTS_CONF:-$DEFAULT_BENCH_REQUESTS}}"
+BENCH_N_PREDICT="${BENCH_N_PREDICT:-${BENCH_N_PREDICT_CONF:-$DEFAULT_BENCH_N_PREDICT}}"
 
 # Skip binary detection for setup (binary may not exist yet)
 if [[ "${1:-}" != "setup" ]]; then
@@ -73,23 +125,13 @@ if [[ "${1:-}" != "setup" ]]; then
 fi
 
 # ----------------------------
-# Performance/parallelism knobs (defaults tuned for Ryzen 7 5700X)
-# Override via env:
-#   LLAMA_THREADS=8 LLAMA_THREADS_BATCH=12 LLAMA_THREADS_HTTP=4 LLAMA_PARALLEL=8 llm-server qwen3
-# ----------------------------
-LLAMA_THREADS="${LLAMA_THREADS:-8}"
-LLAMA_THREADS_BATCH="${LLAMA_THREADS_BATCH:-12}"
-LLAMA_THREADS_HTTP="${LLAMA_THREADS_HTTP:-4}"
-LLAMA_PARALLEL="${LLAMA_PARALLEL:-8}"
-
-# ----------------------------
 # Model registry
 # ----------------------------
 
 declare -A MODEL_ARGS=(
   # Qwen2.5 Coder 7B GGUF local
   [qwen2_5-coder]="
-    -m $HOME/models/qwen2.5-coder-7b-instruct-q4_k_m.gguf
+    -m $MODELS_DIR/qwen2.5-coder-7b-instruct-q4_k_m.gguf
     --chat-template chatml
     --jinja
     --ctx-size 4096
@@ -105,7 +147,7 @@ declare -A MODEL_ARGS=(
 
   # Qwen3 8B GGUF local (standard transformer, full GPU support)
   [qwen3]="
-    -m $HOME/models/Qwen3-8B-Q4_K_M.gguf
+    -m $MODELS_DIR/Qwen3-8B-Q4_K_M.gguf
     --jinja
     --ctx-size 8192
     --batch-size 1024
@@ -118,7 +160,7 @@ declare -A MODEL_ARGS=(
 
   # Qwen3.5 9B GGUF local (hybrid DeltaNet arch — GPU support pending in llama.cpp)
   [qwen3_5]="
-    -m $HOME/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf
+    -m $MODELS_DIR/Qwen_Qwen3.5-9B-Q4_K_M.gguf
     --jinja
     --ctx-size 8192
     --batch-size 1024
@@ -133,7 +175,7 @@ declare -A MODEL_ARGS=(
   # --cpu-moe keeps MoE expert weights in RAM; attention layers on GPU.
   # Supports thinking/reasoning mode via chat template flag.
   [nemotron-nano]="
-    -m $HOME/models/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf
+    -m $MODELS_DIR/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf
     --jinja
     --ctx-size 4096
     --parallel 2
@@ -185,10 +227,10 @@ REASONING_MODELS=(qwen3 qwen3_5 gpt-oss nemotron-nano)
 
 # Local path for each model file
 declare -A MODEL_PATH=(
-  [qwen2_5-coder]="$HOME/models/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
-  [qwen3]="$HOME/models/Qwen3-8B-Q4_K_M.gguf"
-  [qwen3_5]="$HOME/models/Qwen_Qwen3.5-9B-Q4_K_M.gguf"
-  [nemotron-nano]="$HOME/models/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
+  [qwen2_5-coder]="$MODELS_DIR/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+  [qwen3]="$MODELS_DIR/Qwen3-8B-Q4_K_M.gguf"
+  [qwen3_5]="$MODELS_DIR/Qwen_Qwen3.5-9B-Q4_K_M.gguf"
+  [nemotron-nano]="$MODELS_DIR/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
 )
 
 # Draft models for speculative decoding (must share tokenizer with the target)
@@ -199,8 +241,8 @@ declare -A MODEL_DRAFT_HF=(
 )
 
 declare -A MODEL_DRAFT_PATH=(
-  [qwen2_5-coder]="$HOME/models/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf"
-  [qwen3]="$HOME/models/Qwen3-0.6B-Q8_0.gguf"
+  [qwen2_5-coder]="$MODELS_DIR/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf"
+  [qwen3]="$MODELS_DIR/Qwen3-0.6B-Q8_0.gguf"
 )
 
 # =============================================================================
@@ -587,6 +629,67 @@ setup_llama() {
 
   cmake --build "$LLAMA_DIR/build" --config Release -j"$ncpu"
   echo "Done: $LLAMA_DIR/build/bin/llama-server"
+
+  # --- create config file ---
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo ""
+    echo "Creating default configuration file..."
+    mkdir -p "$CONFIG_DIR"
+    cat > "$CONFIG_FILE" << 'EOF'
+# llm-server configuration file
+# This file was created automatically during setup
+# Environment variables override these settings
+# This is a shell-compatible config file - use KEY=VALUE format
+
+# ============================================================================
+# Paths
+# ============================================================================
+
+# Path to llama.cpp installation directory
+LLAMA_CPP=$HOME/applications/llama.cpp
+
+# Directory where models are stored and downloaded
+MODELS=$HOME/models
+
+# ============================================================================
+# Server Settings
+# ============================================================================
+
+# Default bind address
+HOST=0.0.0.0
+
+# Default port for llama-server
+PORT=8084
+
+# ============================================================================
+# Performance Settings
+# ============================================================================
+
+# Number of CPU threads for inference
+THREADS=8
+
+# Number of threads for batch processing
+THREADS_BATCH=12
+
+# Number of HTTP handler threads
+THREADS_HTTP=4
+
+# Number of parallel inference slots
+PARALLEL=8
+
+# ============================================================================
+# Benchmark Settings
+# ============================================================================
+
+# Number of requests for benchmarking
+BENCH_REQUESTS_CONF=10
+
+# Number of tokens to predict per request
+BENCH_N_PREDICT_CONF=256
+EOF
+    echo "Created: $CONFIG_FILE"
+    echo "Edit this file to customize default settings."
+  fi
 }
 
 # =============================================================================
@@ -614,6 +717,11 @@ Flags:
   --update            check for a newer GGUF on HuggingFace and re-download if found
   --host HOST         bind address (default: 0.0.0.0)
   --port N            override default port (default: 8084)
+
+Configuration:
+  Config file: ~/.config/llm-server/config.conf
+  Precedence: Environment variables > Config file > Hardcoded defaults
+  Run 'llm-server setup' to create the default config file.
 
 Env overrides (5700X defaults):
   LLAMA_THREADS=8       LLAMA_THREADS_BATCH=12
