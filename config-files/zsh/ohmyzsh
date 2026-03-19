@@ -69,7 +69,6 @@ zstyle ':omz:update' frequency 13
 # Add wisely, as too many plugins slow down shell startup.
 plugins=(
   tmux
-  git
   git-commit
   fancy-ctrl-z
   fzf

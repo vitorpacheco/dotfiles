@@ -79,19 +79,19 @@ update_system_package() {
         "arch")
             if command -v yay &> /dev/null; then
                 echo -e "  ${DIM}Package manager:${NC} yay (AUR helper)"
-                echo -e "  ${DIM}Running:${NC} yay -Syu $pkg_name"
+                echo -e "  ${DIM}Running:${NC} yay -Sy $pkg_name"
                 yay -Syu --noconfirm "$pkg_name" 2>&1 | while read line; do
                     echo -e "  ${DIM}>${NC} $line"
                 done
             elif command -v paru &> /dev/null; then
                 echo -e "  ${DIM}Package manager:${NC} paru (AUR helper)"
-                echo -e "  ${DIM}Running:${NC} paru -Syu $pkg_name"
+                echo -e "  ${DIM}Running:${NC} paru -Sy $pkg_name"
                 paru -Syu --noconfirm "$pkg_name" 2>&1 | while read line; do
                     echo -e "  ${DIM}>${NC} $line"
                 done
             else
                 echo -e "  ${DIM}Package manager:${NC} pacman"
-                echo -e "  ${DIM}Running:${NC} sudo pacman -Syu $pkg_name"
+                echo -e "  ${DIM}Running:${NC} sudo pacman -Sy $pkg_name"
                 sudo pacman -Syu --noconfirm "$pkg_name" 2>&1 | while read line; do
                     echo -e "  ${DIM}>${NC} $line"
                 done

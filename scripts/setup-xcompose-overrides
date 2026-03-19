@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+#
+# Setup xcompose overrides for Omarchy
+# Creates symlink and sets up include chain in ~/.XCompose
+#
+
+set -euo pipefail
+
+DOTFILES_DIR="${DOTFILES_DIR:-$HOME/personal/dotfiles}"
+CONFIG_DIR="${CONFIG_DIR:-$HOME/.config}"
+XCOMPOSE_OVERRIDES_SOURCE="$DOTFILES_DIR/config-files/xcompose/xcompose-overrides.conf"
+XCOMPOSE_OVERRIDES_DEST="$CONFIG_DIR/omarchy/xcompose-overrides.conf"
+XCOMPOSE_FILE="$HOME/.XCompose"
+OMARCHY_XCOMPOSE="$HOME/.local/share/omarchy/default/xcompose"
+
+# Colors
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[SUCCESS]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Create directory structure
+mkdir -p "$(dirname "$XCOMPOSE_OVERRIDES_DEST")"
+
+# Create symlink to overrides file
+if [[ -L "$XCOMPOSE_OVERRIDES_DEST" ]]; then
+    log_info "Symlink already exists: $XCOMPOSE_OVERRIDES_DEST"
+elif [[ -e "$XCOMPOSE_OVERRIDES_DEST" ]]; then
+    log_warn "File exists at $XCOMPOSE_OVERRIDES_DEST, backing up..."
+    mv "$XCOMPOSE_OVERRIDES_DEST" "${XCOMPOSE_OVERRIDES_DEST}.backup.$(date +%s)"
+    ln -s "$XCOMPOSE_OVERRIDES_SOURCE" "$XCOMPOSE_OVERRIDES_DEST"
+    log_success "Created symlink: $XCOMPOSE_OVERRIDES_DEST"
+else
+    ln -s "$XCOMPOSE_OVERRIDES_SOURCE" "$XCOMPOSE_OVERRIDES_DEST"
+    log_success "Created symlink: $XCOMPOSE_OVERRIDES_DEST"
+fi
+
+# Add include to ~/.XCompose
+INCLUDE_LINE="include \"%H/.config/omarchy/xcompose-overrides.conf\""
+
+if [[ -f "$XCOMPOSE_FILE" ]]; then
+    if grep -q "xcompose-overrides.conf" "$XCOMPOSE_FILE" 2>/dev/null; then
+        log_info "Include already present in ~/.XCompose"
+    else
+        log_info "Adding include to ~/.XCompose..."
+        echo "" >> "$XCOMPOSE_FILE"
+        echo "# Include custom overrides from dotfiles" >> "$XCOMPOSE_FILE"
+        echo "$INCLUDE_LINE" >> "$XCOMPOSE_FILE"
+        log_success "Added include to ~/.XCompose"
+    fi
+else
+    log_warn "~/.XCompose not found. Creating minimal version..."
+    echo "# Minimal XCompose file" > "$XCOMPOSE_FILE"
+    echo "include \"%L\"" >> "$XCOMPOSE_FILE"
+    echo "" >> "$XCOMPOSE_FILE"
+    echo "# Include Omarchy defaults" >> "$XCOMPOSE_FILE"
+    echo "include \"%H/.local/share/omarchy/default/xcompose\"" >> "$XCOMPOSE_FILE"
+    echo "" >> "$XCOMPOSE_FILE"
+    echo "# Include custom overrides from dotfiles" >> "$XCOMPOSE_FILE"
+    echo "$INCLUDE_LINE" >> "$XCOMPOSE_FILE"
+    log_success "Created ~/.XCompose with include"
+fi
+
+# Check user's .XCompose file
+if [[ -f "$XCOMPOSE_FILE" ]]; then
+    log_info "Checking ~/.XCompose file..."
+    if grep -q "xcompose-overrides.conf" "$XCOMPOSE_FILE" 2>/dev/null; then
+        log_info "Overrides already included in ~/.XCompose"
+    else
+        log_info "Note: ~/.XCompose exists but doesn't directly include overrides"
+        log_info "The include chain should be: ~/.XCompose → ~/.local/share/omarchy/default/xcompose → ~/.config/omarchy/xcompose-overrides.conf"
+    fi
+else
+    log_warn "~/.XCompose not found. Creating minimal version..."
+    echo "# Minimal XCompose file" > "$XCOMPOSE_FILE"
+    echo "include \"%L\"" >> "$XCOMPOSE_FILE"
+    echo "" >> "$XCOMPOSE_FILE"
+    echo "# Include Omarchy defaults" >> "$XCOMPOSE_FILE"
+    echo "include \"%H/.local/share/omarchy/default/xcompose\"" >> "$XCOMPOSE_FILE"
+    log_success "Created ~/.XCompose"
+fi
+
+# Restart xcompose if omarchy-restart-xcompose is available
+if command -v omarchy-restart-xcompose &> /dev/null; then
+    log_info "Restarting xcompose..."
+    omarchy-restart-xcompose
+    log_success "Xcompose restarted"
+else
+    log_warn "omarchy-restart-xcompose not found"
+    log_info "You may need to log out and log back in for changes to take effect"
+fi
+
+log_success "Xcompose overrides setup complete!"
+log_info "Test by typing ' followed by c - should produce ç"

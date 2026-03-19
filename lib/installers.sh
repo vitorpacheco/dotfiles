@@ -31,9 +31,25 @@ install_config_files() {
 	log_info "Installing config files to $CONFIG_DIR..."
 	mkdir -p "$CONFIG_DIR"
 
+	# Configs to skip when running on Omarchy (to preserve Omarchy's system configs)
+	local omarchy_excluded_configs=("hypr" "waybar" "btop" "kitty" "ghostty" "wlogout" "nwg-look" "rofi" "swaync")
+
 	for file in "$DOTFILES_DIR/config-files"/*; do
 		if [[ -e "$file" ]]; then
-			local dest="$CONFIG_DIR/$(basename "$file")"
+			local basename_file
+			basename_file=$(basename "$file")
+
+			# Skip Omarchy system configs when on Omarchy
+			if is_omarchy; then
+				for excluded in "${omarchy_excluded_configs[@]}"; do
+					if [[ "$basename_file" == "$excluded" ]]; then
+						log_info "[OMARCHY] Skipping $basename_file (preserving Omarchy system config)"
+						continue 2
+					fi
+				done
+			fi
+
+			local dest="$CONFIG_DIR/$basename_file"
 			create_symlink "$file" "$dest"
 		fi
 	done
@@ -243,6 +259,9 @@ source = ./omarchy-overrides.conf'
 		log_warn "hyprland overrides file not found"
 	fi
 
+	# Install xcompose overrides
+	install_xcompose_overrides
+
 	log_success "Omarchy overrides installation complete"
 }
 
@@ -427,6 +446,13 @@ install_hyprland_plugins() {
 			return 1
 		}
 		log_success "Added hyprland-plugins repository"
+
+		log_info "Updating hyprpm repository..."
+		hyprpm update -q || {
+			log_error "Failed to update hyprpm repository"
+			return 1
+		}
+		log_success "Updated hyprpm repository"
 	else
 		log_info "hyprland-plugins repository already added"
 	fi
@@ -468,6 +494,65 @@ execute_utils() {
 			log_error "Utility script not found: $i"
 		fi
 	done
+}
+
+# --- XCompose Overrides ---
+
+install_xcompose_overrides() {
+	if ! is_omarchy; then
+		log_warn "Omarchy system not detected. Skipping xcompose overrides."
+		return 0
+	fi
+
+	log_info "Installing xcompose overrides..."
+
+	local xcompose_override_source="$DOTFILES_DIR/config-files/xcompose/xcompose-overrides.conf"
+	local xcompose_override_dest="$CONFIG_DIR/omarchy/xcompose-overrides.conf"
+	local omarchy_xcompose="$HOME/.local/share/omarchy/default/xcompose"
+
+	if [[ ! -f "$xcompose_override_source" ]]; then
+		log_warn "Xcompose overrides file not found: $xcompose_override_source"
+		return 0
+	fi
+
+	# Create directory if needed
+	mkdir -p "$(dirname "$xcompose_override_dest")"
+
+	# Create symlink
+	if [[ "$DRY_RUN" == true ]]; then
+		log_info "[DRY-RUN] Would create symlink: $xcompose_override_dest"
+	else
+		create_symlink "$xcompose_override_source" "$xcompose_override_dest"
+	fi
+
+	# Add include to ~/.XCompose file
+	local xcompose_file="$HOME/.XCompose"
+	local include_line='include "%H/.config/omarchy/xcompose-overrides.conf"'
+
+	if [[ -f "$xcompose_file" ]]; then
+		if ! grep -q "xcompose-overrides.conf" "$xcompose_file" 2>/dev/null; then
+			if [[ "$DRY_RUN" == true ]]; then
+				log_info "[DRY-RUN] Would add include line to $xcompose_file"
+			else
+				echo "" >> "$xcompose_file"
+				echo "# Include custom overrides from dotfiles" >> "$xcompose_file"
+				echo "$include_line" >> "$xcompose_file"
+				log_success "Added include to $xcompose_file"
+			fi
+		else
+			log_info "Include already present in $xcompose_file"
+		fi
+	else
+		log_warn "~/.XCompose not found"
+	fi
+
+	# Restart xcompose if available
+	if [[ "$DRY_RUN" == false ]] && command -v omarchy-restart-xcompose &> /dev/null; then
+		log_info "Restarting xcompose..."
+		omarchy-restart-xcompose
+	fi
+
+	log_success "Xcompose overrides installed"
 }
 
 # vi: ft=bash

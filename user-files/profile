@@ -18,6 +18,8 @@ export FLUTTER_ROOT="$HOME/.local/share/mise/installs/flutter/3.35"
 export DART_SDK="$FLUTTER_ROOT/bin/cache/dart-sdk"
 export PNPM_HOME="$HOME/.local/share/pnpm"
 
+export XCOMPOSEFILE="$HOME/.XCompose"
+
 case ":$PATH:" in
 *":$PNPM_HOME:"*) ;;
 *) export PATH="$PNPM_HOME:$PATH" ;;

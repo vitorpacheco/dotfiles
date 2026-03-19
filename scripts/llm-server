@@ -1,35 +1,143 @@
-#!/usr/bin/env bash
+#!/usr/bin/env zsh
+# =============================================================================
+# llm-server — local LLM server launcher built on top of llama.cpp
+#
+# COMMANDS
+#   setup               Clone/update llama.cpp and build it with GPU support.
+#                       On Linux: checks pacman packages, detects CUDA, compiles
+#                       for Ryzen 7 5700X + RTX 3070 Ti (SM 8.6).
+#                       On macOS: checks Homebrew packages, builds with Metal
+#                       (Apple Silicon GPU acceleration).
+#
+#   benchmark <model>   Measure inference throughput (t/s) for a model.
+#                       Starts a temporary server, runs a fixed prompt N times,
+#                       and reports tokens/second. If the model has a draft
+#                       entry configured, also runs speculative decoding and
+#                       reports the speedup. Controlled by:
+#                         BENCH_REQUESTS=10   number of timed requests
+#                         BENCH_N_PREDICT=256 tokens to generate per request
+#
+#   <model>             Start the llama-server for the given model. Downloads
+#                       the GGUF file automatically if not present locally.
+#
+# MODEL FLAGS (for <model> command)
+#   --host HOST         Bind address (default: 0.0.0.0)
+#   --port N            Override the model's default port
+#   --reasoning         Enable thinking/reasoning mode (Qwen3 family only)
+#   --no-reasoning      Disable reasoning mode (default)
+#   --draft             Enable speculative decoding with the model's draft model
+#   --no-draft          Disable speculative decoding (default)
+#   --update            Check HuggingFace for a newer GGUF and re-download
+#   --                  Everything after this is passed directly to llama-server
+#
+# PERFORMANCE KNOBS (env overrides, tuned for Ryzen 7 5700X)
+#   LLAMA_THREADS=8         inference threads (physical core count)
+#   LLAMA_THREADS_BATCH=12  batch processing threads
+#   LLAMA_THREADS_HTTP=4    HTTP handler threads
+#   LLAMA_PARALLEL=8        concurrent inference slots
+#   LLAMA_DIR               path to the llama.cpp checkout
+#   LLAMA_SERVER            override the llama-server binary path
+#
+# CONFIGURATION FILE
+#   Settings can be configured in ~/.config/llm-server/config.conf
+#   Run 'llm-server setup' to create the default config file.
+#   Precedence: Environment variables > Config file > Hardcoded defaults
+#
+# MODEL REGISTRY
+#   To add a new model, add entries to:
+#     MODEL_ARGS    — llama-server flags (must include -m <path>)
+#     MODEL_PORT    — default port
+#     MODEL_PATH    — local GGUF path (for existence check / auto-download)
+#     MODEL_HF      — "owner/repo filename" on HuggingFace (for download)
+#   Optionally, for speculative decoding support:
+#     MODEL_DRAFT_PATH — local path for the small draft GGUF
+#     MODEL_DRAFT_HF   — "owner/repo filename" for the draft model
+#   For reasoning mode support, add the model name to REASONING_MODELS.
+# =============================================================================
+# Ensure standard utilities are available (dirname, mkdir, etc.)
+# This is needed when the script runs in restricted PATH environments
+export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+
 set -euo pipefail
 
-LLAMA_SERVER="${LLAMA_SERVER:-$HOME/applications/llama.cpp/build/bin/llama-server}"
+# =============================================================================
+# Configuration file handling
+# =============================================================================
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/llm-server"
+CONFIG_FILE="$CONFIG_DIR/config.conf"
+
+# Default configuration values
+DEFAULT_LLAMA_DIR="$HOME/applications/llama.cpp"
+DEFAULT_MODELS_DIR="$HOME/models"
+DEFAULT_HOST="0.0.0.0"
+DEFAULT_PORT="8084"
+DEFAULT_THREADS="8"
+DEFAULT_THREADS_BATCH="12"
+DEFAULT_THREADS_HTTP="4"
+DEFAULT_PARALLEL="8"
+DEFAULT_BENCH_REQUESTS="10"
+DEFAULT_BENCH_N_PREDICT="256"
+
+# Load configuration from shell-compatible .conf file
+# Config file uses simple KEY=VALUE format with variable expansion
+load_config() {
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    return 0
+  fi
+
+  # Source the config file to load variables
+  # This allows shell variable expansion like $HOME
+  set -a
+  source "$CONFIG_FILE" 2>/dev/null || true
+  set +a
+}
+
+# Initialize config values (call this after defining the function)
+load_config
+
+# Use config values if available, otherwise use defaults
+# Environment variables override config values
+LLAMA_DIR="${LLAMA_DIR:-${LLAMA_CPP:-$DEFAULT_LLAMA_DIR}}"
+MODELS_DIR="${MODELS_DIR:-${MODELS:-$DEFAULT_MODELS_DIR}}"
+SERVER_HOST="${SERVER_HOST:-${HOST:-$DEFAULT_HOST}}"
+SERVER_PORT="${SERVER_PORT:-${PORT:-$DEFAULT_PORT}}"
+LLAMA_THREADS="${LLAMA_THREADS:-${THREADS:-$DEFAULT_THREADS}}"
+LLAMA_THREADS_BATCH="${LLAMA_THREADS_BATCH:-${THREADS_BATCH:-$DEFAULT_THREADS_BATCH}}"
+LLAMA_THREADS_HTTP="${LLAMA_THREADS_HTTP:-${THREADS_HTTP:-$DEFAULT_THREADS_HTTP}}"
+LLAMA_PARALLEL="${LLAMA_PARALLEL:-${PARALLEL:-$DEFAULT_PARALLEL}}"
+BENCH_REQUESTS="${BENCH_REQUESTS:-${BENCH_REQUESTS_CONF:-$DEFAULT_BENCH_REQUESTS}}"
+BENCH_N_PREDICT="${BENCH_N_PREDICT:-${BENCH_N_PREDICT_CONF:-$DEFAULT_BENCH_N_PREDICT}}"
+
+# Skip binary detection for setup (binary may not exist yet)
+if [[ "${1:-}" != "setup" ]]; then
+  if [[ -n "${LLAMA_SERVER:-}" ]]; then
+    : # use env override as-is
+  elif command -v llama-server &>/dev/null; then
+    LLAMA_SERVER="llama-server"
+  elif [[ -x "$LLAMA_DIR/build/bin/llama-server" ]]; then
+    LLAMA_SERVER="$LLAMA_DIR/build/bin/llama-server"
+  else
+    echo "Error: llama-server not found (PATH, $LLAMA_DIR/build/bin/, or \$LLAMA_SERVER)"
+    echo "Hint: run 'llm-server setup' to build from source"
+    exit 1
+  fi
+fi
 
 # ----------------------------
-# Performance/parallelism knobs (defaults tuned for Ryzen 7 5700X)
-# Override via env:
-#   LLAMA_THREADS=8 LLAMA_THREADS_BATCH=12 LLAMA_THREADS_HTTP=4 LLAMA_PARALLEL=8 ./llm-server qwen
-# ----------------------------
-LLAMA_THREADS="${LLAMA_THREADS:-8}"
-LLAMA_THREADS_BATCH="${LLAMA_THREADS_BATCH:-12}"
-LLAMA_THREADS_HTTP="${LLAMA_THREADS_HTTP:-4}"
-LLAMA_PARALLEL="${LLAMA_PARALLEL:-8}"
-
-# ----------------------------
-# Modelo registry (adicione/remova aqui)
-# Cada modelo define:
-#   - ARGS: flags específicas do modelo/preset
-#   - DEFAULT_PORT: porta padrão
+# Model registry
 # ----------------------------
 
 declare -A MODEL_ARGS=(
   # Qwen2.5 Coder 7B GGUF local
-  [qwen]="
-    -m $HOME/models/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf
+  [qwen2_5-coder]="
+    -m $MODELS_DIR/qwen2.5-coder-7b-instruct-q4_k_m.gguf
     --chat-template chatml
     --jinja
     --ctx-size 4096
     --batch-size 1024
     --ubatch-size 256
-    --flash-attn
+    --flash-attn on
     --cache-type-k q8_0
     --cache-type-v q8_0
     --fit on
@@ -37,100 +145,698 @@ declare -A MODEL_ARGS=(
     --n-gpu-layers auto
   "
 
-  # GPT-OSS 20B preset (baixa os pesos automaticamente)
+  # Qwen3 8B GGUF local (standard transformer, full GPU support)
+  [qwen3]="
+    -m $MODELS_DIR/Qwen3-8B-Q4_K_M.gguf
+    --jinja
+    --ctx-size 8192
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn on
+    --cache-type-k q8_0
+    --cache-type-v q8_0
+    --n-gpu-layers auto
+  "
+
+  # Qwen3.5 9B GGUF local (hybrid DeltaNet arch — GPU support pending in llama.cpp)
+  [qwen3_5]="
+    -m $MODELS_DIR/Qwen_Qwen3.5-9B-Q4_K_M.gguf
+    --jinja
+    --ctx-size 8192
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn on
+    --cache-type-k q8_0
+    --cache-type-v q8_0
+    --n-gpu-layers auto
+  "
+
+  # Nemotron-3-Nano 30B MoE (3B active params, hybrid Mamba-2 + attention)
+  # --cpu-moe keeps MoE expert weights in RAM; attention layers on GPU.
+  # Supports thinking/reasoning mode via chat template flag.
+  [nemotron-nano]="
+    -m $MODELS_DIR/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf
+    --jinja
+    --ctx-size 4096
+    --parallel 2
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn on
+    --cache-type-k q8_0
+    --cache-type-v q8_0
+    --cpu-moe
+    --n-gpu-layers auto
+  "
+
+  # GPT-OSS 20B preset (downloads weights automatically)
+  # MoE: 20.9B total / 3.6B active params. --cpu-moe keeps expert weights in
+  # RAM while attention layers stay on GPU, optimal for 8GB VRAM.
   [gpt-oss]="
     --gpt-oss-20b-default
     --ctx-size 4096
+    --parallel 2
     --batch-size 1024
     --ubatch-size 256
-    --flash-attn
+    --flash-attn on
     --cache-type-k q8_0
     --cache-type-v q8_0
-    --fit on
-    --fit-target 2048
+    --cpu-moe
     --n-gpu-layers auto
   "
 )
 
 declare -A MODEL_PORT=(
-  [qwen]=8080
-  [gpt-oss]=8081
+  [qwen2_5-coder]=8084
+  [qwen3]=8084
+  [qwen3_5]=8084
+  [gpt-oss]=8084
+  [nemotron-nano]=8084
 )
+
+# HuggingFace source for auto-download: "owner/repo filename"
+# Models without an entry (e.g. gpt-oss) are assumed to self-download
+declare -A MODEL_HF=(
+  [qwen2_5-coder]="Qwen/Qwen2.5-Coder-7B-Instruct-GGUF qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+  [qwen3]="Qwen/Qwen3-8B-GGUF Qwen3-8B-Q4_K_M.gguf"
+  [qwen3_5]="bartowski/Qwen_Qwen3.5-9B-GGUF Qwen_Qwen3.5-9B-Q4_K_M.gguf"
+  [nemotron-nano]="bartowski/nvidia_Nemotron-3-Nano-30B-A3B-GGUF nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
+)
+
+# Models that support reasoning/thinking mode (--reasoning-budget)
+REASONING_MODELS=(qwen3 qwen3_5 gpt-oss nemotron-nano)
+
+# Local path for each model file
+declare -A MODEL_PATH=(
+  [qwen2_5-coder]="$MODELS_DIR/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
+  [qwen3]="$MODELS_DIR/Qwen3-8B-Q4_K_M.gguf"
+  [qwen3_5]="$MODELS_DIR/Qwen_Qwen3.5-9B-Q4_K_M.gguf"
+  [nemotron-nano]="$MODELS_DIR/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
+)
+
+# Draft models for speculative decoding (must share tokenizer with the target)
+# Speculative decoding is most impactful when the target runs below ~15 t/s.
+declare -A MODEL_DRAFT_HF=(
+  [qwen2_5-coder]="Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF qwen2.5-coder-0.5b-instruct-q4_k_m.gguf"
+  [qwen3]="Qwen/Qwen3-0.6B-GGUF Qwen3-0.6B-Q8_0.gguf"
+)
+
+declare -A MODEL_DRAFT_PATH=(
+  [qwen2_5-coder]="$MODELS_DIR/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf"
+  [qwen3]="$MODELS_DIR/Qwen3-0.6B-Q8_0.gguf"
+)
+
+# =============================================================================
+# Model management
+# =============================================================================
+
+download_model_file() {
+  local repo="$1" file="$2" dest="$3"
+  if command -v huggingface-cli &>/dev/null; then
+    huggingface-cli download "$repo" "$file" --local-dir "$(dirname "$dest")"
+  elif command -v wget &>/dev/null; then
+    wget --continue "https://huggingface.co/$repo/resolve/main/$file" -O "$dest"
+  elif command -v curl &>/dev/null; then
+    curl -L --continue-at - "https://huggingface.co/$repo/resolve/main/$file" -o "$dest"
+  else
+    echo "Error: install huggingface-cli, wget, or curl to download models"
+    exit 1
+  fi
+}
+
+hf_lfs_sha256() {
+  local repo="$1" file="$2"
+  command -v python3 &>/dev/null || return 1
+  # limit=100 avoids pagination for large repos with many quant files
+  local url="https://huggingface.co/api/models/$repo/tree/main?limit=100"
+  local json
+  if command -v curl &>/dev/null; then
+    json=$(curl -sf "$url") || return 1
+  elif command -v wget &>/dev/null; then
+    json=$(wget -qO- "$url") || return 1
+  else
+    return 1
+  fi
+  echo "$json" | python3 -c "
+import json, sys
+try:
+    for f in json.load(sys.stdin):
+        if f.get('path') == '$file' and f.get('lfs'):
+            oid = f['lfs']['oid']
+            print(oid.split(':')[-1] if ':' in oid else oid)
+            break
+except: pass
+" 2>/dev/null
+}
+
+ensure_model() {
+  local model="$1"
+  [[ -z "${MODEL_PATH[$model]+x}" ]] && return 0
+
+  local model_path="${MODEL_PATH[$model]}"
+  [[ -f "$model_path" ]] && return 0
+
+  if [[ -z "${MODEL_HF[$model]+x}" ]]; then
+    echo "Error: model file not found: $model_path"
+    exit 1
+  fi
+
+  local repo file
+  read -r repo file <<< "${MODEL_HF[$model]}"
+  echo "Model not found. Downloading $file from $repo..."
+  mkdir -p "$(dirname "$model_path")"
+  download_model_file "$repo" "$file" "$model_path"
+
+  local sha
+  sha=$(hf_lfs_sha256 "$repo" "$file")
+  [[ -n "$sha" ]] && echo "$sha" > "${model_path}.sha256"
+}
+
+ensure_draft_model() {
+  local model="$1"
+  [[ -z "${MODEL_DRAFT_PATH[$model]+x}" ]] && return 0
+
+  local draft_path="${MODEL_DRAFT_PATH[$model]}"
+  [[ -f "$draft_path" ]] && return 0
+
+  if [[ -z "${MODEL_DRAFT_HF[$model]+x}" ]]; then
+    echo "Error: draft model not found: $draft_path"
+    exit 1
+  fi
+
+  local repo file
+  read -r repo file <<< "${MODEL_DRAFT_HF[$model]}"
+  echo "Draft model not found. Downloading $file from $repo..."
+  mkdir -p "$(dirname "$draft_path")"
+  download_model_file "$repo" "$file" "$draft_path"
+
+  local sha
+  sha=$(hf_lfs_sha256 "$repo" "$file")
+  [[ -n "$sha" ]] && echo "$sha" > "${draft_path}.sha256"
+}
+
+update_model() {
+  local model="$1"
+  [[ -z "${MODEL_PATH[$model]+x}" ]] && return 0
+  [[ -z "${MODEL_HF[$model]+x}" ]] && return 0
+
+  local model_file="${MODEL_PATH[$model]}"
+  local repo file
+  read -r repo file <<< "${MODEL_HF[$model]}"
+
+  echo "Checking for updates to $model..."
+  local remote_sha
+  remote_sha=$(hf_lfs_sha256 "$repo" "$file")
+
+  if [[ -z "$remote_sha" ]]; then
+    echo "Warning: could not check remote version (requires curl and python3)"
+    return 0
+  fi
+
+  local local_sha=""
+  [[ -f "${model_file}.sha256" ]] && local_sha=$(cat "${model_file}.sha256")
+
+  if [[ "$remote_sha" == "$local_sha" ]]; then
+    echo "$model: already up to date (${remote_sha:0:8}...)"
+    return 0
+  fi
+
+  if [[ -n "$local_sha" ]]; then
+    echo "$model: update found (${local_sha:0:8}... -> ${remote_sha:0:8}...)"
+  else
+    echo "$model: downloading latest version..."
+  fi
+
+  mkdir -p "$(dirname "$model_file")"
+  [[ -f "$model_file" ]] && rm "$model_file"
+  download_model_file "$repo" "$file" "$model_file"
+  echo "$remote_sha" > "${model_file}.sha256"
+  echo "$model: updated successfully"
+}
+
+# =============================================================================
+# Benchmark
+# =============================================================================
+
+_bench_http() {
+  local url="$1" payload="$2"
+  if command -v curl &>/dev/null; then
+    curl -sf --max-time 300 -X POST "$url" \
+      -H "Content-Type: application/json" -d "$payload"
+  else
+    wget -qO- --timeout=300 --post-data="$payload" \
+      --header="Content-Type: application/json" "$url"
+  fi
+}
+
+_bench_wait() {
+  local base_url="$1"
+  echo -n "  Waiting for server"
+  for _ in $(seq 1 90); do
+    local r
+    if command -v curl &>/dev/null; then
+      r=$(curl -sf --max-time 2 "$base_url/health" 2>/dev/null) || true
+    else
+      r=$(wget -qO- --timeout=2 "$base_url/health" 2>/dev/null) || true
+    fi
+    if echo "$r" | grep -q '"status":"ok"'; then echo " ok"; return 0; fi
+    echo -n "."; sleep 2
+  done
+  echo " timeout"; return 1
+}
+
+_bench_run() {
+  local base_url="$1" n="$2" n_predict="$3"
+  local prompt="Explain in detail how attention mechanisms work in transformer neural networks, covering self-attention, multi-head attention, positional encodings, and the training process."
+  local payload="{\"prompt\":\"$prompt\",\"n_predict\":$n_predict,\"temperature\":0}"
+  local tmp
+  tmp=$(mktemp -d)
+
+  # warmup
+  _bench_http "$base_url/completion" "$payload" > /dev/null 2>&1 || true
+
+  for i in $(seq 1 "$n"); do
+    _bench_http "$base_url/completion" "$payload" > "$tmp/r$i.json" 2>/dev/null || true
+  done
+
+  python3 - "$tmp" <<'PYEOF'
+import json, sys, os, glob
+total_tokens = total_ms = count = 0
+for f in glob.glob(os.path.join(sys.argv[1], '*.json')):
+    try:
+        d = json.load(open(f))
+        t = d.get('timings', {})
+        total_tokens += t.get('predicted_n', 0)
+        total_ms += t.get('predicted_ms', 0.0)
+        count += 1
+    except: pass
+if total_ms > 0:
+    tps = total_tokens / (total_ms / 1000)
+    print(f"{tps:.1f} t/s  ({total_tokens} tokens, {count} req)")
+else:
+    print("N/A")
+PYEOF
+  rm -rf "$tmp"
+}
+
+benchmark_model() {
+  local model="$1"
+  local port=19999
+  local base_url="http://127.0.0.1:$port"
+  local n="${BENCH_REQUESTS:-10}"
+  local n_predict="${BENCH_N_PREDICT:-256}"
+
+  if [[ -z "${MODEL_ARGS[$model]+x}" ]]; then
+    echo "Invalid model: $model"; usage; exit 1
+  fi
+
+  ensure_model "$model"
+
+  # Always disable reasoning for consistent benchmark results
+  local reasoning_args=()
+  if printf '%s\n' "${REASONING_MODELS[@]}" | grep -qx "$model"; then
+    reasoning_args=(--reasoning-budget 0)
+  fi
+
+  local has_draft=0
+  [[ -n "${MODEL_DRAFT_PATH[$model]+x}" ]] && has_draft=1
+  local total_runs=$(( 1 + has_draft ))
+
+  echo ""
+  echo "=== Benchmark: $model ==="
+  echo "    $n requests x $n_predict tokens"
+
+  # --- baseline ---
+  echo ""
+  echo "[ 1/$total_runs ] Baseline (no draft)"
+  local server_pid
+  # shellcheck disable=SC2086
+  "$LLAMA_SERVER" \
+    --threads "$LLAMA_THREADS" --threads-batch "$LLAMA_THREADS_BATCH" \
+    --threads-http "$LLAMA_THREADS_HTTP" --parallel 1 \
+    --log-disable \
+    ${=MODEL_ARGS[$model]} \
+    --host 127.0.0.1 --port "$port" \
+    "${reasoning_args[@]}" > /dev/null 2>&1 &
+  server_pid=$!
+
+  if ! _bench_wait "$base_url"; then
+    kill "$server_pid" 2>/dev/null; return 1
+  fi
+
+  local baseline
+  baseline=$(_bench_run "$base_url" "$n" "$n_predict")
+  echo "  Result: $baseline"
+  kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null
+
+  # --- speculative decoding ---
+  if [[ $has_draft -eq 1 ]]; then
+    ensure_draft_model "$model"
+    local draft_path="${MODEL_DRAFT_PATH[$model]}"
+
+    echo ""
+    echo "[ 2/2 ] With draft model ($(basename "$draft_path"))"
+    # shellcheck disable=SC2086
+    "$LLAMA_SERVER" \
+      --host 127.0.0.1 --port "$port" \
+      --threads "$LLAMA_THREADS" --threads-batch "$LLAMA_THREADS_BATCH" \
+      --threads-http "$LLAMA_THREADS_HTTP" --parallel 1 \
+      --log-disable \
+      --model-draft "$draft_path" \
+      ${=MODEL_ARGS[$model]} \
+      "${reasoning_args[@]}" > /dev/null 2>&1 &
+    server_pid=$!
+
+    if ! _bench_wait "$base_url"; then
+      kill "$server_pid" 2>/dev/null; return 1
+    fi
+
+    local draft_result
+    draft_result=$(_bench_run "$base_url" "$n" "$n_predict")
+    echo "  Result: $draft_result"
+    kill "$server_pid" 2>/dev/null; wait "$server_pid" 2>/dev/null
+
+    python3 -c "
+b = float('$baseline'.split()[0]) if '$baseline' != 'N/A' else 0
+d = float('$draft_result'.split()[0]) if '$draft_result' != 'N/A' else 0
+if b > 0 and d > 0:
+    pct = (d - b) / b * 100
+    sign = '+' if pct >= 0 else ''
+    print(f'  Speedup:  {sign}{pct:.1f}%')
+" 2>/dev/null
+  fi
+
+  echo ""
+  echo "==================================="
+}
+
+# =============================================================================
+# Setup
+# =============================================================================
+
+setup_llama() {
+  local os
+  os=$(uname -s)
+  local ncpu
+  ncpu=$(nproc 2>/dev/null || sysctl -n hw.logicalcpu)
+
+  # --- package check ---
+  local missing=()
+  if [[ "$os" == "Darwin" ]]; then
+    if ! command -v brew &>/dev/null; then
+      echo "Error: Homebrew not found. Install it from https://brew.sh"
+      exit 1
+    fi
+    for pkg in git cmake ninja; do
+      brew list "$pkg" &>/dev/null || missing+=("$pkg")
+    done
+    command -v gcc &>/dev/null || missing+=(gcc)
+    if [[ ${#missing[@]} -gt 0 ]]; then
+      echo "Required packages not found: ${missing[*]}"
+      brew install "${missing[@]}"
+    fi
+  else
+    for pkg in git cmake ninja cuda; do
+      pacman -Q "$pkg" &>/dev/null || missing+=("$pkg")
+    done
+    command -v gcc &>/dev/null || missing+=(base-devel)
+    if [[ ${#missing[@]} -gt 0 ]]; then
+      echo "Required packages not found: ${missing[*]}"
+      sudo pacman -S --needed "${missing[@]}"
+    fi
+  fi
+
+  # --- GPU info ---
+  if [[ "$os" == "Darwin" ]]; then
+    echo "Apple Silicon detected — Metal GPU acceleration will be used."
+    system_profiler SPDisplaysDataType 2>/dev/null | grep -E "Chipset Model|VRAM" || true
+  elif command -v nvidia-smi &>/dev/null && nvidia-smi &>/dev/null; then
+    echo "NVIDIA GPU detected:"
+    nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader
+  else
+    echo "Warning: nvidia-smi not found or failed."
+    echo "  The NVIDIA driver may not be installed or loaded."
+    echo "  Build will continue without CUDA/GPU support."
+  fi
+
+  # --- clone / update ---
+  if [[ ! -d "$LLAMA_DIR" ]]; then
+    echo "Cloning llama.cpp into $LLAMA_DIR..."
+    git clone https://github.com/ggml-org/llama.cpp "$LLAMA_DIR"
+  else
+    echo "Updating llama.cpp..."
+    git -C "$LLAMA_DIR" pull
+  fi
+
+  # --- build flags ---
+  local gpu_flags=()
+  if [[ "$os" == "Darwin" ]]; then
+    echo "Building for Apple Silicon (Metal)..."
+    gpu_flags=(-DGGML_METAL=ON -DCMAKE_OSX_ARCHITECTURES=arm64)
+  else
+    # Locate CUDA toolkit (Arch installs to /opt/cuda, not in PATH by default)
+    local cuda_root=""
+    if command -v nvcc &>/dev/null; then
+      cuda_root="$(dirname "$(dirname "$(command -v nvcc)")")"
+    else
+      for candidate in /opt/cuda /usr/local/cuda /usr/lib/cuda; do
+        if [[ -x "$candidate/bin/nvcc" ]]; then
+          cuda_root="$candidate"; break
+        fi
+      done
+    fi
+
+    if [[ -n "$cuda_root" ]]; then
+      echo "CUDA toolkit found at: $cuda_root"
+      echo "Building for Ryzen 7 5700X + RTX 3070 Ti (SM 8.6)..."
+      gpu_flags=(
+        -DGGML_CUDA=ON
+        -DCUDAToolkit_ROOT="$cuda_root"
+        -DCMAKE_CUDA_COMPILER="$cuda_root/bin/nvcc"
+        -DCMAKE_CUDA_ARCHITECTURES=86
+        -DGGML_CUDA_FA_ALL_QUANTS=ON
+      )
+    else
+      echo "Warning: CUDA toolkit (nvcc) not found. Building without GPU support."
+      echo "  Install the 'cuda' package and try again: sudo pacman -S cuda"
+    fi
+  fi
+
+  cmake -S "$LLAMA_DIR" -B "$LLAMA_DIR/build" \
+    -DCMAKE_BUILD_TYPE=Release \
+    "${gpu_flags[@]}" \
+    -DGGML_NATIVE=ON \
+    -GNinja
+
+  cmake --build "$LLAMA_DIR/build" --config Release -j"$ncpu"
+  echo "Done: $LLAMA_DIR/build/bin/llama-server"
+
+  # --- create config file ---
+  if [[ ! -f "$CONFIG_FILE" ]]; then
+    echo ""
+    echo "Creating default configuration file..."
+    mkdir -p "$CONFIG_DIR"
+    cat > "$CONFIG_FILE" << 'EOF'
+# llm-server configuration file
+# This file was created automatically during setup
+# Environment variables override these settings
+# This is a shell-compatible config file - use KEY=VALUE format
+
+# ============================================================================
+# Paths
+# ============================================================================
+
+# Path to llama.cpp installation directory
+LLAMA_CPP=$HOME/applications/llama.cpp
+
+# Directory where models are stored and downloaded
+MODELS=$HOME/models
+
+# ============================================================================
+# Server Settings
+# ============================================================================
+
+# Default bind address
+HOST=0.0.0.0
+
+# Default port for llama-server
+PORT=8084
+
+# ============================================================================
+# Performance Settings
+# ============================================================================
+
+# Number of CPU threads for inference
+THREADS=8
+
+# Number of threads for batch processing
+THREADS_BATCH=12
+
+# Number of HTTP handler threads
+THREADS_HTTP=4
+
+# Number of parallel inference slots
+PARALLEL=8
+
+# ============================================================================
+# Benchmark Settings
+# ============================================================================
+
+# Number of requests for benchmarking
+BENCH_REQUESTS_CONF=10
+
+# Number of tokens to predict per request
+BENCH_N_PREDICT_CONF=256
+EOF
+    echo "Created: $CONFIG_FILE"
+    echo "Edit this file to customize default settings."
+  fi
+}
+
+# =============================================================================
+# Usage
+# =============================================================================
 
 usage() {
   cat <<EOF
-Uso:
-  llm-server <qwen|gpt-oss> [--host 0.0.0.0] [--port N] [-- extra llama-server args...]
+Usage:
+  llm-server setup
+  llm-server benchmark <model>
+  llm-server <model> [flags] [-- extra llama-server args...]
+
+Models: qwen2_5-coder | qwen3 | qwen3_5 | gpt-oss | nemotron-nano
+
+Commands:
+  setup               clone/update llama.cpp and build with CUDA (RTX 3070 Ti + 5700X)
+  benchmark <model>   measure throughput with and without speculative decoding
+
+Flags:
+  --reasoning         enable reasoning/thinking mode (Qwen3 family only)
+  --no-reasoning      disable reasoning/thinking mode (default)
+  --draft             enable speculative decoding with the model's draft model
+  --no-draft          disable speculative decoding (default)
+  --update            check for a newer GGUF on HuggingFace and re-download if found
+  --host HOST         bind address (default: 0.0.0.0)
+  --port N            override default port (default: 8084)
+
+Configuration:
+  Config file: ~/.config/llm-server/config.conf
+  Precedence: Environment variables > Config file > Hardcoded defaults
+  Run 'llm-server setup' to create the default config file.
 
 Env overrides (5700X defaults):
-  LLAMA_THREADS=8
-  LLAMA_THREADS_BATCH=12
-  LLAMA_THREADS_HTTP=4
-  LLAMA_PARALLEL=8
+  LLAMA_THREADS=8       LLAMA_THREADS_BATCH=12
+  LLAMA_THREADS_HTTP=4  LLAMA_PARALLEL=8
+  LLAMA_DIR=$HOME/applications/llama.cpp
+  BENCH_REQUESTS=10     BENCH_N_PREDICT=256
 
-Exemplos:
-  llm-server qwen
-  LLAMA_PARALLEL=12 llm-server qwen
-  LLAMA_THREADS=10 LLAMA_THREADS_BATCH=16 llm-server qwen
-  llm-server qwen --port 8080
-  llm-server gpt-oss --host 0.0.0.0 --port 8081
-  llm-server qwen -- --log-verbosity 4
+Examples:
+  llm-server setup
+  llm-server benchmark qwen3
+  llm-server qwen3
+  llm-server qwen3 --draft
+  llm-server qwen3 --reasoning
+  llm-server qwen3 --update
+  llm-server qwen2_5-coder --port 9000
+  llm-server qwen3 -- --log-verbosity 4
 EOF
 }
 
+# =============================================================================
+# Main
+# =============================================================================
+
 if [[ $# -lt 1 ]]; then
-  usage
-  exit 1
+  usage; exit 1
+fi
+
+if [[ "$1" == "setup" ]]; then
+  setup_llama; exit 0
+fi
+
+if [[ "$1" == "benchmark" ]]; then
+  [[ $# -lt 2 ]] && { echo "Usage: llm-server benchmark <model>"; exit 1; }
+  benchmark_model "$2"; exit 0
 fi
 
 MODEL="$1"
 shift
 if [[ -z "${MODEL_ARGS[$MODEL]+x}" ]]; then
-  echo "Modelo inválido: $MODEL"
-  usage
-  exit 1
+  echo "Invalid model: $MODEL"; usage; exit 1
 fi
 
 HOST="0.0.0.0"
 PORT="${MODEL_PORT[$MODEL]}"
+REASONING=0
+DRAFT=0
+UPDATE=0
 
-# Parse args simples do script; tudo depois de "--" vai direto pro llama-server
+# Parse script args; everything after "--" is passed directly to llama-server
 PASSTHRU=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-  --host)
-    HOST="$2"
-    shift 2
-    ;;
-  --port)
-    PORT="$2"
-    shift 2
-    ;;
-  --)
-    shift
-    PASSTHRU+=("$@")
-    break
-    ;;
-  -h | --help)
-    usage
-    exit 0
-    ;;
-  *)
-    echo "Arg desconhecido: $1"
-    usage
-    exit 1
-    ;;
+  --host)         HOST="$2";    shift 2 ;;
+  --port)         PORT="$2";    shift 2 ;;
+  --reasoning)    REASONING=1;  shift   ;;
+  --no-reasoning) REASONING=0;  shift   ;;
+  --draft)        DRAFT=1;      shift   ;;
+  --no-draft)     DRAFT=0;      shift   ;;
+  --update)       UPDATE=1;     shift   ;;
+  --)             shift; PASSTHRU+=("$@"); break ;;
+  -h|--help)      usage; exit 0 ;;
+  *)              echo "Unknown argument: $1"; usage; exit 1 ;;
   esac
 done
 
-# Monta comando final
+if [[ $UPDATE -eq 1 ]]; then
+  update_model "$MODEL"
+fi
+ensure_model "$MODEL"
+
+# Reasoning budget
+REASONING_ARGS=()
+if printf '%s\n' "${REASONING_MODELS[@]}" | grep -qx "$MODEL"; then
+  [[ $REASONING -eq 0 ]] && REASONING_ARGS=(--reasoning-budget 0)
+fi
+
+# Speculative decoding
+DRAFT_ARGS=()
+if [[ $DRAFT -eq 1 ]]; then
+  if [[ -n "${MODEL_DRAFT_PATH[$MODEL]+x}" ]]; then
+    ensure_draft_model "$MODEL"
+    DRAFT_ARGS=(--model-draft "${MODEL_DRAFT_PATH[$MODEL]}")
+  else
+    echo "Warning: no draft model configured for $MODEL, ignoring --draft"
+  fi
+fi
+
+# Check for existing process on the port
+existing_pid=""
+if command -v ss &>/dev/null; then
+  existing_pid=$(ss -tlnp "sport = :$PORT" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | head -1 || true)
+elif command -v lsof &>/dev/null; then
+  existing_pid=$(lsof -ti ":$PORT" 2>/dev/null | head -1 || true)
+fi
+
+if [[ -n "$existing_pid" ]]; then
+  echo "Port $PORT is already in use by PID $existing_pid ($(ps -p "$existing_pid" -o comm= 2>/dev/null || echo unknown))."
+  printf "Kill it and continue? [y/N] "
+  read -r _answer
+  case "$_answer" in
+    [yY]*) kill "$existing_pid" && echo "Killed PID $existing_pid." || { echo "Failed to kill PID $existing_pid."; exit 1; } ;;
+    *) echo "Cancelled."; exit 0 ;;
+  esac
+fi
+
+# Launch
 # shellcheck disable=SC2086
 exec "$LLAMA_SERVER" \
-  --host "$HOST" \
-  --port "$PORT" \
   --threads "$LLAMA_THREADS" \
   --threads-batch "$LLAMA_THREADS_BATCH" \
   --threads-http "$LLAMA_THREADS_HTTP" \
   --parallel "$LLAMA_PARALLEL" \
-  ${MODEL_ARGS[$MODEL]} \
+  ${=MODEL_ARGS[$MODEL]} \
+  "${REASONING_ARGS[@]}" \
+  "${DRAFT_ARGS[@]}" \
+  --host "$HOST" \
+  --port "$PORT" \
   "${PASSTHRU[@]}"
