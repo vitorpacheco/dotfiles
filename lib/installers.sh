@@ -32,7 +32,7 @@ install_config_files() {
 	mkdir -p "$CONFIG_DIR"
 
 	# Configs to skip when running on Omarchy (to preserve Omarchy's system configs)
-	local omarchy_excluded_configs=("hypr" "waybar" "btop" "kitty" "ghostty" "wlogout" "nwg-look" "rofi" "swaync")
+	local omarchy_excluded_configs=("btop" "kitty" "ghostty")
 
 	for file in "$DOTFILES_DIR/config-files"/*; do
 		if [[ -e "$file" ]]; then
@@ -352,68 +352,72 @@ source = ./kool-overrides.conf'
 	fi
 
 	# Install Waybar configuration symlinks (Kool-specific)
-	local waybar_configs_dir="$CONFIG_DIR/waybar/configs"
-	local waybar_styles_dir="$CONFIG_DIR/waybar/style"
-	local waybar_config_link="$CONFIG_DIR/waybar/config"
-	local waybar_style_link="$CONFIG_DIR/waybar/style.css"
 	local waybar_conf_source="$DOTFILES_DIR/config-files/waybar/kool-waybar.conf"
 
-	# Read waybar preferences from kool-waybar.conf if it exists
-	local waybar_config_name=""
-	local waybar_style_name=""
+	# Check if waybar override config exists
+	if [[ ! -f "$waybar_conf_source" ]]; then
+		log_info "Waybar override config not found, skipping waybar setup"
+	else
+		local waybar_configs_dir="$CONFIG_DIR/waybar/configs"
+		local waybar_styles_dir="$CONFIG_DIR/waybar/style"
+		local waybar_config_link="$CONFIG_DIR/waybar/config"
+		local waybar_style_link="$CONFIG_DIR/waybar/style.css"
 
-	if [[ -f "$waybar_conf_source" ]]; then
+		# Read waybar preferences from kool-waybar.conf if it exists
+		local waybar_config_name=""
+		local waybar_style_name=""
+
 		# Extract waybar config from the waybar config file
 		waybar_config_name=$(grep -E '^WAYBAR_CONFIG=' "$waybar_conf_source" | head -1 | sed 's/^WAYBAR_CONFIG="\(.*\)"/\1/' | tr -d '"')
 		waybar_style_name=$(grep -E '^WAYBAR_STYLE=' "$waybar_conf_source" | head -1 | sed 's/^WAYBAR_STYLE="\(.*\)"/\1/' | tr -d '"')
-	fi
 
-	# Default fallback values if not set in config
-	if [[ -z "$waybar_config_name" ]]; then
-		waybar_config_name="[TOP] Default"
-	fi
-	if [[ -z "$waybar_style_name" ]]; then
-		waybar_style_name="[Dark] Wallust Obsidian Edge.css"
-	fi
+		# Default fallback values if not set in config
+		if [[ -z "$waybar_config_name" ]]; then
+			waybar_config_name="[TOP] Default"
+		fi
+		if [[ -z "$waybar_style_name" ]]; then
+			waybar_style_name="[Dark] Wallust Obsidian Edge.css"
+		fi
 
-	# Create waybar config symlink if configs directory exists
-	if [[ -d "$waybar_configs_dir" ]]; then
-		local waybar_config_target="$waybar_configs_dir/$waybar_config_name"
+		# Create waybar config symlink if configs directory exists
+		if [[ -d "$waybar_configs_dir" ]]; then
+			local waybar_config_target="$waybar_configs_dir/$waybar_config_name"
 
-		if [[ -f "$waybar_config_target" ]]; then
-			if [[ "$DRY_RUN" == true ]]; then
-				log_info "[DRY-RUN] Would create waybar config symlink: $waybar_config_name"
+			if [[ -f "$waybar_config_target" ]]; then
+				if [[ "$DRY_RUN" == true ]]; then
+					log_info "[DRY-RUN] Would create waybar config symlink: $waybar_config_name"
+				else
+					backup_if_exists "$waybar_config_link"
+					ln -sf "$waybar_config_target" "$waybar_config_link"
+					log_success "Set waybar config to: $waybar_config_name"
+				fi
 			else
-				backup_if_exists "$waybar_config_link"
-				ln -sf "$waybar_config_target" "$waybar_config_link"
-				log_success "Set waybar config to: $waybar_config_name"
+				log_warn "Waybar config not found: $waybar_config_name"
+				log_info "Available configs in: $waybar_configs_dir"
 			fi
 		else
-			log_warn "Waybar config not found: $waybar_config_name"
-			log_info "Available configs in: $waybar_configs_dir"
+			log_info "Waybar configs directory not found, skipping waybar config setup"
 		fi
-	else
-		log_info "Waybar configs directory not found, skipping waybar config setup"
-	fi
 
-	# Create waybar style symlink if styles directory exists
-	if [[ -d "$waybar_styles_dir" ]]; then
-		local waybar_style_target="$waybar_styles_dir/$waybar_style_name"
+		# Create waybar style symlink if styles directory exists
+		if [[ -d "$waybar_styles_dir" ]]; then
+			local waybar_style_target="$waybar_styles_dir/$waybar_style_name"
 
-		if [[ -f "$waybar_style_target" ]]; then
-			if [[ "$DRY_RUN" == true ]]; then
-				log_info "[DRY-RUN] Would create waybar style symlink: $waybar_style_name"
+			if [[ -f "$waybar_style_target" ]]; then
+				if [[ "$DRY_RUN" == true ]]; then
+					log_info "[DRY-RUN] Would create waybar style symlink: $waybar_style_name"
+				else
+					backup_if_exists "$waybar_style_link"
+					ln -sf "$waybar_style_target" "$waybar_style_link"
+					log_success "Set waybar style to: $waybar_style_name"
+				fi
 			else
-				backup_if_exists "$waybar_style_link"
-				ln -sf "$waybar_style_target" "$waybar_style_link"
-				log_success "Set waybar style to: $waybar_style_name"
+				log_warn "Waybar style not found: $waybar_style_name"
+				log_info "Available styles in: $waybar_styles_dir"
 			fi
 		else
-			log_warn "Waybar style not found: $waybar_style_name"
-			log_info "Available styles in: $waybar_styles_dir"
+			log_info "Waybar styles directory not found, skipping waybar style setup"
 		fi
-	else
-		log_info "Waybar styles directory not found, skipping waybar style setup"
 	fi
 
 	log_success "Kool Hyprland overrides installation complete"
@@ -534,9 +538,9 @@ install_xcompose_overrides() {
 			if [[ "$DRY_RUN" == true ]]; then
 				log_info "[DRY-RUN] Would add include line to $xcompose_file"
 			else
-				echo "" >> "$xcompose_file"
-				echo "# Include custom overrides from dotfiles" >> "$xcompose_file"
-				echo "$include_line" >> "$xcompose_file"
+				echo "" >>"$xcompose_file"
+				echo "# Include custom overrides from dotfiles" >>"$xcompose_file"
+				echo "$include_line" >>"$xcompose_file"
 				log_success "Added include to $xcompose_file"
 			fi
 		else
@@ -547,7 +551,7 @@ install_xcompose_overrides() {
 	fi
 
 	# Restart xcompose if available
-	if [[ "$DRY_RUN" == false ]] && command -v omarchy-restart-xcompose &> /dev/null; then
+	if [[ "$DRY_RUN" == false ]] && command -v omarchy-restart-xcompose &>/dev/null; then
 		log_info "Restarting xcompose..."
 		omarchy-restart-xcompose
 	fi
