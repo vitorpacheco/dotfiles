@@ -35,4 +35,8 @@ if command -v mise &> /dev/null; then
   precmd_functions+=(_mise_ensure_shims_first)
 fi
 
+if [[ -z "${CURL_CA_BUNDLE:-}" && -f "/etc/ssl/certs/ca-certificates.crt" ]]; then
+  export CURL_CA_BUNDLE="/etc/ssl/certs/ca-certificates.crt"
+fi
+
 # vim: ft=zsh
