@@ -49,7 +49,10 @@ export PATH=$PATH:$ANDROID_SDK_ROOT/cmdline-tools/latest/bin
 
 export PATH=$PATH:$HOME/.lmstudio/bin
 
-# Added by Toolbox App
 export PATH=$PATH:$HOME/.local/share/JetBrains/Toolbox/scripts
 
 . "$HOME/.cargo/env"
+
+if [[ -f "$HOME/.profile-overrides" ]]; then
+    . "$HOME/.profile-overrides"
+fi
