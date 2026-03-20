@@ -139,10 +139,16 @@ Preview changes without applying:
 │   └── tmux.conf
 ├── scripts/             # Utility scripts
 │   └── tmux-sessionizer # Tmux workspace selector
+├── docs/                # Extra workflow documentation
+│   └── git-alias-workflow.md
 ├── gnome/               # GNOME desktop settings (Linux)
 ├── icons/               # Icon themes (Linux)
 └── utils/               # Additional utilities
 ```
+
+## 📚 Documentation
+
+- Git aliases and worktree flow: `docs/git-alias-workflow.md`
 
 ## 🔧 What's Installed
 

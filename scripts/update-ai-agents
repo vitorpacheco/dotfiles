@@ -22,9 +22,17 @@ UPDATED=0
 ALREADY_LATEST=0
 SKIPPED=0
 FAILED=0
+APPROVE_MACOS=false
+
+TOOLS="claude codex opencode qwen gemini aider kimi cursor windsurf antigravity kiro kiro-cli"
 
 # Detect OS/distro
 detect_os() {
+    if [[ "$(uname -s 2>/dev/null)" == "Darwin" ]]; then
+        echo "macos"
+        return
+    fi
+
     if [ -f /etc/os-release ]; then
         . /etc/os-release
         local id_like="${ID_LIKE:-}"
@@ -53,6 +61,13 @@ check_system_package() {
             ;;
         "arch")
             pacman -Q "$pkg_name" 2>/dev/null | grep -q "^$pkg_name"
+            ;;
+        "macos")
+            if command -v brew &> /dev/null; then
+                brew list --formula "$pkg_name" >/dev/null 2>&1 || brew list --cask "$pkg_name" >/dev/null 2>&1
+            else
+                return 1
+            fi
             ;;
         *)
             return 1
@@ -97,13 +112,54 @@ update_system_package() {
                 done
             fi
             ;;
+        "macos")
+            if command -v brew &> /dev/null; then
+                echo -e "  ${DIM}Package manager:${NC} brew"
+                echo -e "  ${DIM}Running:${NC} brew upgrade $pkg_name"
+                brew upgrade "$pkg_name" 2>&1 | while read line; do
+                    echo -e "  ${DIM}>${NC} $line"
+                done
+            else
+                echo -e "  ${RED}✗${NC} ${RED}Homebrew not found${NC}"
+                return 1
+            fi
+            ;;
     esac
 }
 
 # Get version from command
 get_version() {
     local cmd=$1
-    $cmd --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "unknown"
+    $cmd --version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown"
+}
+
+approve_macos_binary() {
+    local agent_name=$1
+    local cmd_name=$2
+
+    if [[ "$APPROVE_MACOS" != "true" ]] || [[ "$OS_TYPE" != "macos" ]]; then
+        return
+    fi
+
+    if ! command -v xattr &> /dev/null; then
+        echo -e "  ${YELLOW}⚠${NC} ${YELLOW}xattr not found${NC} (cannot auto-approve ${agent_name})"
+        return
+    fi
+
+    local bin_path
+    bin_path="$(command -v "$cmd_name" 2>/dev/null || true)"
+
+    if [ -z "$bin_path" ]; then
+        return
+    fi
+
+    if xattr -p com.apple.quarantine "$bin_path" >/dev/null 2>&1; then
+        if xattr -d com.apple.quarantine "$bin_path" >/dev/null 2>&1; then
+            echo -e "  ${GREEN}✓${NC} ${GREEN}Auto-approved${NC} ${agent_name} (${bin_path})"
+        else
+            echo -e "  ${YELLOW}⚠${NC} ${YELLOW}Could not auto-approve${NC} ${agent_name} (${bin_path})"
+        fi
+    fi
 }
 
 # Print agent header
@@ -176,6 +232,8 @@ update_claude() {
                 FAILED=$((FAILED + 1))
             fi
         fi
+
+        approve_macos_binary "Claude Code" "claude"
     else
         print_agent_result "skipped" ""
         SKIPPED=$((SKIPPED + 1))
@@ -217,6 +275,8 @@ update_codex() {
                 ALREADY_LATEST=$((ALREADY_LATEST + 1))
             fi
         fi
+
+        approve_macos_binary "OpenAI Codex" "codex"
     else
         print_agent_result "skipped" ""
         SKIPPED=$((SKIPPED + 1))
@@ -258,6 +318,8 @@ update_opencode() {
                 ALREADY_LATEST=$((ALREADY_LATEST + 1))
             fi
         fi
+
+        approve_macos_binary "Opencode" "opencode"
     else
         print_agent_result "skipped" ""
         SKIPPED=$((SKIPPED + 1))
@@ -299,6 +361,8 @@ update_qwen() {
                 ALREADY_LATEST=$((ALREADY_LATEST + 1))
             fi
         fi
+
+        approve_macos_binary "Qwen Code" "qwen"
     else
         print_agent_result "skipped" ""
         SKIPPED=$((SKIPPED + 1))
@@ -340,6 +404,8 @@ update_gemini() {
                 ALREADY_LATEST=$((ALREADY_LATEST + 1))
             fi
         fi
+
+        approve_macos_binary "Gemini CLI" "gemini"
     else
         print_agent_result "skipped" ""
         SKIPPED=$((SKIPPED + 1))
@@ -411,6 +477,8 @@ update_aider() {
                 ALREADY_LATEST=$((ALREADY_LATEST + 1))
             fi
         fi
+
+        approve_macos_binary "Aider" "aider"
     else
         print_agent_result "skipped" ""
         SKIPPED=$((SKIPPED + 1))
@@ -471,6 +539,8 @@ update_kimi() {
         else
             print_agent_result "self-managed" "(unknown installation method)"
         fi
+
+        approve_macos_binary "Kimi Code" "kimi"
     else
         print_agent_result "skipped" ""
         SKIPPED=$((SKIPPED + 1))
@@ -497,6 +567,8 @@ update_cursor() {
         else
             print_agent_result "self-managed" "(desktop app - check for updates in the application)"
         fi
+
+        approve_macos_binary "Cursor" "cursor"
     elif [ -f "$HOME/Applications/cursor/cursor" ] || [ -f "/opt/cursor/cursor" ]; then
         print_agent_result "self-managed" "(desktop app - check for updates in the application)"
     else
@@ -525,6 +597,8 @@ update_windsurf() {
         else
             print_agent_result "self-managed" "(desktop app - check for updates in the application)"
         fi
+
+        approve_macos_binary "Windsurf" "windsurf"
     elif [ -f "$HOME/Applications/Windsurf/windsurf" ] || [ -f "/opt/windsurf/windsurf" ]; then
         print_agent_result "self-managed" "(desktop app - check for updates in the application)"
     else
@@ -553,6 +627,8 @@ update_antigravity() {
         else
             print_agent_result "self-managed" "(system package - use your package manager: apt/pacman)"
         fi
+
+        approve_macos_binary "Antigravity" "antigravity"
     else
         print_agent_result "skipped" ""
         SKIPPED=$((SKIPPED + 1))
@@ -579,6 +655,8 @@ update_kiro() {
         else
             print_agent_result "self-managed" "(Electron app - auto-updates or download from https://kiro.dev)"
         fi
+
+        approve_macos_binary "Kiro IDE" "kiro"
     elif [ -f "$HOME/Applications/Kiro/kiro" ] || [ -f "/opt/kiro/kiro" ]; then
         print_agent_result "self-managed" "(Electron app - auto-updates or download from https://kiro.dev)"
     else
@@ -591,14 +669,18 @@ update_kiro_cli() {
     print_agent_start "Kiro CLI" "checking and updating"
 
     if command -v kiro-cli &> /dev/null; then
-        echo -e "  ${DIM}Current:${NC} $(/home/vitor/.local/bin/kiro-cli --version 2>/dev/null)"
+        local kiro_cli_cmd
+        kiro_cli_cmd="$(command -v kiro-cli)"
+
+        echo -e "  ${DIM}Current:${NC} $($kiro_cli_cmd --version 2>/dev/null)"
         echo -e "  ${DIM}Running:${NC} kiro-cli update"
 
-        local old_version=$(/home/vitor/.local/bin/kiro-cli --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "unknown")
+        local old_version
+        old_version=$($kiro_cli_cmd --version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
 
         # Run update and capture output
         local output
-        output=$(/home/vitor/.local/bin/kiro-cli update 2>&1)
+        output=$($kiro_cli_cmd update 2>&1)
         local exit_code=$?
 
         # Print output
@@ -606,7 +688,8 @@ update_kiro_cli() {
             [ -n "$line" ] && echo -e "  ${DIM}>${NC} $line"
         done
 
-        local new_version=$(/home/vitor/.local/bin/kiro-cli --version 2>/dev/null | grep -oP '\d+\.\d+\.\d+' | head -1 || echo "unknown")
+        local new_version
+        new_version=$($kiro_cli_cmd --version 2>/dev/null | grep -Eo '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
 
         if [ $exit_code -eq 0 ]; then
             if [ "$old_version" != "$new_version" ] && [ "$new_version" != "unknown" ]; then
@@ -620,6 +703,8 @@ update_kiro_cli() {
             print_agent_result "failed" "(update command failed with exit code $exit_code)"
             FAILED=$((FAILED + 1))
         fi
+
+        approve_macos_binary "Kiro CLI" "kiro-cli"
     else
         print_agent_result "skipped" ""
         SKIPPED=$((SKIPPED + 1))
@@ -631,9 +716,10 @@ show_help() {
     echo -e "\n${CYAN}${BOLD}AI Agents Updater${NC}"
     echo -e "${DIM}Updates AI coding agents installed on your system${NC}\n"
     echo -e "${BOLD}Usage:${NC}"
-    echo -e "  update-ai-agents [TOOL]\n"
+    echo -e "  update-ai-agents [TOOL] [OPTIONS]\n"
     echo -e "${BOLD}Options:${NC}"
     echo -e "  -h, --help     Show this help message\n"
+    echo -e "  --approve-macos  Auto-remove quarantine from updated binaries on macOS\n"
     echo -e "${BOLD}Available tools:${NC}"
     echo -e "  all            Update all agents (default)"
     echo -e "  claude         Claude Code"
@@ -717,22 +803,52 @@ update_single() {
 
 # Main
 main() {
-    local arg="${1:-}"
+    local selected_tool="all"
 
-    # Check for help flag
-    if [[ "$arg" == "-h" ]] || [[ "$arg" == "--help" ]]; then
-        show_help
-        exit 0
+    for arg in "$@"; do
+        case "$arg" in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            --approve-macos)
+                APPROVE_MACOS=true
+                ;;
+            all)
+                selected_tool="all"
+                ;;
+            claude|codex|opencode|qwen|gemini|aider|kimi|cursor|windsurf|antigravity|kiro|kiro-cli)
+                if [[ "$selected_tool" != "all" ]] && [[ "$selected_tool" != "$arg" ]]; then
+                    echo -e "\n${RED}${BOLD}✗ Error:${NC} Please provide only one tool at a time"
+                    echo -e "${DIM}Run 'update-ai-agents --help' for usage${NC}\n"
+                    exit 1
+                fi
+                selected_tool="$arg"
+                ;;
+            *)
+                echo -e "\n${RED}${BOLD}✗ Error:${NC} Unknown option or tool '${arg}'"
+                echo -e "${DIM}Run 'update-ai-agents --help' for available tools${NC}\n"
+                exit 1
+                ;;
+        esac
+    done
+
+    if [[ "$APPROVE_MACOS" == "true" ]] && [[ "$OS_TYPE" != "macos" ]]; then
+        echo -e "${YELLOW}⚠${NC} ${YELLOW}--approve-macos ignored${NC} (current OS: ${OS_TYPE})"
     fi
 
     echo -e "\n${CYAN}${BOLD}═══════════════════════════════════════════════════════════${NC}"
     echo -e "${CYAN}${BOLD}           🤖 AI AGENTS UPDATER${NC}"
     echo -e "${CYAN}${BOLD}═══════════════════════════════════════════════════════════${NC}"
 
+    if [[ "$APPROVE_MACOS" == "true" ]] && [[ "$OS_TYPE" == "macos" ]]; then
+        echo -e "\n${DIM}macOS auto-approval:${NC} ${BOLD}enabled${NC}"
+    fi
+
     # If specific tool requested
-    if [ $# -eq 1 ] && [[ "$arg" != "all" ]]; then
-        echo -e "\n${DIM}Updating single agent:${NC} ${BOLD}$arg${NC}\n"
-        update_single "$arg"
+    if [[ "$selected_tool" != "all" ]]; then
+        echo -e "\n${DIM}Updating single agent:${NC} ${BOLD}$selected_tool${NC}\n"
+        update_single "$selected_tool"
     else
         # Show OS info for all-agents mode
         if [ "$OS_TYPE" != "unknown" ]; then
