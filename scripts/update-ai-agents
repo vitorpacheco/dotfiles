@@ -75,6 +75,32 @@ check_system_package() {
     esac
 }
 
+# Check if an Arch package has a newer version available
+has_arch_update() {
+    local pkg_name=$1
+
+    if command -v yay &> /dev/null; then
+        yay -Qu "$pkg_name" 2>/dev/null | grep -q "^$pkg_name "
+    elif command -v paru &> /dev/null; then
+        paru -Qu "$pkg_name" 2>/dev/null | grep -q "^$pkg_name "
+    else
+        pacman -Qu "$pkg_name" 2>/dev/null | grep -q "^$pkg_name "
+    fi
+}
+
+# Check if an npm global package has a newer version available
+has_npm_update() {
+    local pkg_name=$1
+
+    if ! command -v npm &> /dev/null; then
+        return 1
+    fi
+
+    local outdated
+    outdated="$(npm outdated -g "$pkg_name" --json 2>/dev/null || true)"
+    [ -n "$outdated" ] && [ "$outdated" != "{}" ]
+}
+
 # Update system package
 update_system_package() {
     local pkg_name=$1
@@ -94,22 +120,34 @@ update_system_package() {
         "arch")
             if command -v yay &> /dev/null; then
                 echo -e "  ${DIM}Package manager:${NC} yay (AUR helper)"
-                echo -e "  ${DIM}Running:${NC} yay -Sy $pkg_name"
-                yay -Syu --noconfirm "$pkg_name" 2>&1 | while read line; do
-                    echo -e "  ${DIM}>${NC} $line"
-                done
+                if has_arch_update "$pkg_name"; then
+                    echo -e "  ${DIM}Running:${NC} yay -S --needed $pkg_name"
+                    yay -S --needed --noconfirm "$pkg_name" 2>&1 | while read line; do
+                        echo -e "  ${DIM}>${NC} $line"
+                    done
+                else
+                    echo -e "  ${DIM}>${NC} No newer version available for $pkg_name"
+                fi
             elif command -v paru &> /dev/null; then
                 echo -e "  ${DIM}Package manager:${NC} paru (AUR helper)"
-                echo -e "  ${DIM}Running:${NC} paru -Sy $pkg_name"
-                paru -Syu --noconfirm "$pkg_name" 2>&1 | while read line; do
-                    echo -e "  ${DIM}>${NC} $line"
-                done
+                if has_arch_update "$pkg_name"; then
+                    echo -e "  ${DIM}Running:${NC} paru -S --needed $pkg_name"
+                    paru -S --needed --noconfirm "$pkg_name" 2>&1 | while read line; do
+                        echo -e "  ${DIM}>${NC} $line"
+                    done
+                else
+                    echo -e "  ${DIM}>${NC} No newer version available for $pkg_name"
+                fi
             else
                 echo -e "  ${DIM}Package manager:${NC} pacman"
-                echo -e "  ${DIM}Running:${NC} sudo pacman -Sy $pkg_name"
-                sudo pacman -Syu --noconfirm "$pkg_name" 2>&1 | while read line; do
-                    echo -e "  ${DIM}>${NC} $line"
-                done
+                if has_arch_update "$pkg_name"; then
+                    echo -e "  ${DIM}Running:${NC} sudo pacman -S --needed $pkg_name"
+                    sudo pacman -S --needed --noconfirm "$pkg_name" 2>&1 | while read line; do
+                        echo -e "  ${DIM}>${NC} $line"
+                    done
+                else
+                    echo -e "  ${DIM}>${NC} No newer version available for $pkg_name"
+                fi
             fi
             ;;
         "macos")
@@ -261,11 +299,15 @@ update_codex() {
             fi
         else
             echo -e "  ${DIM}Installation:${NC} npm global"
-            echo -e "  ${DIM}Running:${NC} npm update -g @openai/codex"
             local old_version=$(get_version "codex")
-            npm update -g @openai/codex 2>&1 | while read line; do
-                echo -e "  ${DIM}>${NC} $line"
-            done
+            if has_npm_update "@openai/codex"; then
+                echo -e "  ${DIM}Running:${NC} npm update -g @openai/codex"
+                npm update -g @openai/codex 2>&1 | while read line; do
+                    echo -e "  ${DIM}>${NC} $line"
+                done
+            else
+                echo -e "  ${DIM}>${NC} No newer version available for @openai/codex"
+            fi
             local new_version=$(get_version "codex")
             if [ "$old_version" != "$new_version" ] && [ "$new_version" != "unknown" ]; then
                 print_agent_result "updated" "($old_version → $new_version)"
@@ -347,11 +389,15 @@ update_qwen() {
             fi
         else
             echo -e "  ${DIM}Installation:${NC} npm global"
-            echo -e "  ${DIM}Running:${NC} npm update -g @qwen-code/qwen-code"
             local old_version=$(get_version "qwen")
-            npm update -g @qwen-code/qwen-code 2>&1 | while read line; do
-                echo -e "  ${DIM}>${NC} $line"
-            done
+            if has_npm_update "@qwen-code/qwen-code"; then
+                echo -e "  ${DIM}Running:${NC} npm update -g @qwen-code/qwen-code"
+                npm update -g @qwen-code/qwen-code 2>&1 | while read line; do
+                    echo -e "  ${DIM}>${NC} $line"
+                done
+            else
+                echo -e "  ${DIM}>${NC} No newer version available for @qwen-code/qwen-code"
+            fi
             local new_version=$(get_version "qwen")
             if [ "$old_version" != "$new_version" ] && [ "$new_version" != "unknown" ]; then
                 print_agent_result "updated" "($old_version → $new_version)"
@@ -390,11 +436,15 @@ update_gemini() {
             fi
         else
             echo -e "  ${DIM}Installation:${NC} npm global"
-            echo -e "  ${DIM}Running:${NC} npm update -g @google/gemini-cli"
             local old_version=$(get_version "gemini")
-            npm update -g @google/gemini-cli 2>&1 | while read line; do
-                echo -e "  ${DIM}>${NC} $line"
-            done
+            if has_npm_update "@google/gemini-cli"; then
+                echo -e "  ${DIM}Running:${NC} npm update -g @google/gemini-cli"
+                npm update -g @google/gemini-cli 2>&1 | while read line; do
+                    echo -e "  ${DIM}>${NC} $line"
+                done
+            else
+                echo -e "  ${DIM}>${NC} No newer version available for @google/gemini-cli"
+            fi
             local new_version=$(get_version "gemini")
             if [ "$old_version" != "$new_version" ] && [ "$new_version" != "unknown" ]; then
                 print_agent_result "updated" "($old_version → $new_version)"
@@ -523,11 +573,15 @@ update_kimi() {
         # Check if installed via npm (legacy)
         elif npm list -g @kimi-ai/kimi-code 2>/dev/null | grep -q "kimi-code"; then
             echo -e "  ${DIM}Installation:${NC} npm global (legacy)"
-            echo -e "  ${DIM}Running:${NC} npm update -g @kimi-ai/kimi-code"
             local old_version=$(get_version "kimi")
-            npm update -g @kimi-ai/kimi-code 2>&1 | while read line; do
-                echo -e "  ${DIM}>${NC} $line"
-            done
+            if has_npm_update "@kimi-ai/kimi-code"; then
+                echo -e "  ${DIM}Running:${NC} npm update -g @kimi-ai/kimi-code"
+                npm update -g @kimi-ai/kimi-code 2>&1 | while read line; do
+                    echo -e "  ${DIM}>${NC} $line"
+                done
+            else
+                echo -e "  ${DIM}>${NC} No newer version available for @kimi-ai/kimi-code"
+            fi
             local new_version=$(get_version "kimi")
             if [ "$old_version" != "$new_version" ] && [ "$new_version" != "unknown" ]; then
                 print_agent_result "updated" "($old_version → $new_version)"

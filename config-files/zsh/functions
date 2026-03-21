@@ -4,7 +4,67 @@ bw_unlock() {
 
 # WTF is running on port
 wtf () {
-  lsof -i tcp:$1
+  if [ -z "$1" ]; then
+    echo "Usage: wtf <port>"
+    return 1
+  fi
+
+  if ! [[ "$1" =~ ^[0-9]+$ ]]; then
+    echo "Error: port must be a number"
+    return 1
+  fi
+
+  local port="$1"
+  local matches
+  local needs_sudo=0
+  matches=$(lsof -nP -i "TCP:$port" 2>/dev/null)
+
+  if [ -n "$matches" ]; then
+    local -a lsof_pids
+    lsof_pids=(${(f)"$(lsof -nP -t -i "TCP:$port" 2>/dev/null)"})
+
+    echo "$matches"
+
+    if (( ${#lsof_pids[@]} > 0 )); then
+      echo "PID(s): ${lsof_pids[*]}"
+    fi
+
+    return 0
+  fi
+
+  if command -v sudo >/dev/null 2>&1; then
+    if sudo -n true 2>/dev/null; then
+      matches=$(sudo lsof -nP -i "TCP:$port" 2>/dev/null)
+    elif [[ -t 0 ]]; then
+      echo "Requesting sudo to inspect port $port..."
+      if sudo -v; then
+        matches=$(sudo lsof -nP -i "TCP:$port" 2>/dev/null)
+      fi
+    else
+      needs_sudo=1
+    fi
+
+    if [ -n "$matches" ]; then
+      local -a sudo_pids
+      sudo_pids=(${(f)"$(sudo lsof -nP -t -i "TCP:$port" 2>/dev/null)"})
+
+      echo "$matches"
+
+      if (( ${#sudo_pids[@]} > 0 )); then
+        echo "PID(s): ${sudo_pids[*]}"
+      fi
+
+      return 0
+    fi
+  fi
+
+  if (( needs_sudo == 1 )); then
+    echo "No process found without sudo on port $port"
+    echo "Run this in an interactive shell: sudo lsof -nP -i TCP:$port"
+    return 0
+  fi
+
+  echo "No process found on port $port"
 }
 
 # Compress using zip
