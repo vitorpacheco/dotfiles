@@ -1,188 +1,160 @@
-# Dotfiles Repository - Agent Guidelines
+# AGENTS Guide for This Dotfiles Repository
 
-This repository manages personal dotfiles and system configuration for Linux (Ubuntu/Debian, Arch) and macOS environments.
+This repository is a Bash-first dotfiles installer for Linux (Ubuntu/Debian, Arch) and macOS.
+Use this guide as the default operating contract for coding agents.
 
-## Build/Test/Install Commands
+## Repository Layout
 
-This is a dotfiles management repository with no formal build system. Use the main install script or Makefile:
+- Entrypoint: `./install`
+- Profile orchestration and CLI flow: `lib/profiles.sh`
+- Core helpers and globals: `lib/core.sh`
+- Preflight checks: `lib/preflight.sh`
+- Install actions: `lib/installers.sh`
+- Health checks: `lib/health.sh`
+- Shared package/logging helpers: `packages/lib.sh`
+- Config sources: `config-files/` and `user-files/`
+- Script groups: `packages/`, `installers/`, `apps/`, `utils/`, `scripts/`
+
+## Cursor and Copilot Rules
+
+Checked paths:
+
+- `.cursorrules`: not present
+- `.cursor/rules/`: not present
+- `.github/copilot-instructions.md`: not present
+
+If any of these files are added later, treat them as higher-priority local instructions.
+
+## Build / Lint / Test Commands
+
+There is no compile step or unit-test suite at repo root.
+Validation is done with shell syntax checks, installer health checks, and dry-runs.
+
+### Primary Commands
 
 ```bash
-# Using Makefile (recommended)
-make install-all          # Install everything (full profile)
-make install-minimal      # Install essential configs only
-make install-config       # Install config-files/ to ~/.config/
-make install-user         # Install user-files/ to ~/
-make check                # Verify installation health
-make restore              # Restore all backed up files
-make dry-run              # Preview changes without applying
-make validate             # Validate all script syntax
-make update-nvim          # Update nvim submodule and commit reference
-make update-submodules    # Update all submodules
-
-# Using install script directly
-./install --help                    # Show all options
-./install --profile=minimal         # Minimal installation
-./install --profile=full            # Full installation
-./install --profile=omarchy         # Omarchy overrides only
-./install --dry-run --config        # Preview config installation
-./install --check                   # Health check
-./install --restore                 # Restore backups
-./install --config --user-config    # Install specific components
-./install --verbose --config        # Verbose output
-
-# Update git submodules manually
-git submodule update --init --recursive
-git submodule update --remote config-files/nvim
+make help
+make install-all
+make install-minimal
+make install-omarchy
+make check
+make validate
+make dry-run
 ```
 
-## Available Install Flags
-
-- `--config` - Install config-files/ to ~/.config/ (includes nvim, ghostty)
-- `--user-config` - Install user-files/ to ~/
-- `--packages` - Run package installation scripts
-- `--installers` - Run installer scripts (includes ghostty installer)
-- `--apps` - Run app installation scripts
-- `--local-scripts` - Symlink scripts/ to ~/.local/scripts/
-- `--gnome` - Run GNOME-specific scripts (auto-detects DE)
-- `--icons` - Run icons/install.sh
-- `--omarchy-overrides` - Install Omarchy-specific overrides (tmux, hyprland)
-- `--kool-overrides` - Install Kool Hyprland overrides (ghostty, hyprland, waybar)
-- `--utils="script.sh"` - Run specific utility from utils/
-- `--dry-run` - Preview changes without applying
-- `--verbose` - Enable verbose output
-- `--check` - Verify installation health
-- `--restore` - Restore backed up files
-- `--profile=minimal|full|omarchy|kool` - Use predefined installation profile
-
-## Testing Single Scripts
+### Install Script Commands
 
 ```bash
-# Validate syntax of a single script
-bash -n packages/01-base-packages.sh
-bash -n installers/01-tmux.sh
-bash -n installers/06-ghostty.sh
-bash -n apps/01-flatpak.sh
+./install --help
+./install --profile=full
+./install --profile=minimal
+./install --profile=omarchy
+./install --profile=kool
+./install --check
+./install --dry-run --profile=full
+./install --restore
+```
 
-# Run a single package script directly
-bash packages/01-base-packages.sh
+### Single-Test Equivalent (One Changed Script)
 
-# Run a single installer script directly
-bash installers/01-tmux.sh
-bash installers/06-ghostty.sh
+Use this when you only touched one shell script.
 
-# Validate all scripts at once
-make validate
+```bash
+bash -n ./install
+bash -n lib/core.sh
+bash -n lib/installers.sh
+bash -n installers/02-oh-my-zsh.sh
+bash -n packages/04-node.sh
+bash -n apps/02-docker.sh
+```
+
+### Slice Tests (One Functional Area)
+
+```bash
+./install --dry-run --config
+./install --dry-run --user-config
+./install --dry-run --installers
+./install --dry-run --packages
+./install --dry-run --apps
+./install --dry-run --local-scripts
 ```
 
 ## Code Style Guidelines
 
-### Shell Scripts (bash)
+## 1) Shell Baseline
 
-**Shebang:** Use `#!/usr/bin/env bash` (preferred) or `#!/bin/bash`
+- Use `#!/usr/bin/env bash` for executable shell scripts.
+- Use `set -euo pipefail` unless file conventions explicitly differ.
+- Prefer guard clauses and explicit return paths in functions.
+- Use `[[ ... ]]` instead of `[` for Bash conditionals.
+- Quote expansions by default: `"$var"`, `"${arr[@]}"`.
 
-**Error Handling:**
-- Use `set -euo pipefail` at the start of all scripts
-- Check command existence: `command -v "$1" >/dev/null 2>&1`
-- Use `||` for graceful fallbacks: `bash "$script" || log_error "Failed"`
+## 2) Imports and Module Wiring
 
-**Naming Conventions:**
-- Functions: `snake_case` (e.g., `install_config_files`, `show_help`)
-- Constants/Environment: `UPPER_CASE` (e.g., `DOTFILES_DIR`, `CONFIG_DIR`)
-- Local variables: `lower_case` (e.g., `script_path`, `current_dir`)
-- Associative arrays: `SNAKE_CASE` (e.g., `ARCH_PACKAGES`, `UBUNTU_PACKAGES`)
+- Source required libraries near the top of each script.
+- Resolve relative paths from `SCRIPT_DIR`; avoid fragile `pwd` assumptions.
+- Typical wiring pattern:
 
-**Output/Logging:**
-- Use color-coded logging from `packages/lib.sh`:
-  - `log_info()` - Blue [INFO]
-  - `log_success()` - Green [SUCCESS]
-  - `log_warn()` - Yellow [WARN]
-  - `log_error()` - Red [ERROR]
-  - `log_debug()` - Only when DEBUG=true
-- Use prefixed tags: `[APT]`, `[YAY]`, `[TMUX]`, `[PKG]`, `[CONFIG-FILES]`
+```bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "$SCRIPT_DIR/lib/core.sh"
+```
 
-**Library Architecture:**
-- `lib/core.sh` - Core variables, utility functions, platform detection
-- `lib/profiles.sh` - Argument parsing, profile handling, main execution
-- `lib/installers.sh` - All installation functions (configs, apps, scripts)
-- `lib/preflight.sh` - Pre-flight checks (OS, dependencies)
-- `lib/health.sh` - Health check functions
-- `packages/lib.sh` - Shared library for packages (logging, OS detection, package helpers)
+## 3) Naming and Types
 
-**Platform Detection Functions:**
-- `is_omarchy()` - Check for Omarchy system
-- `is_kool()` - Check for JaKooLit Hyprland dotfiles
-- `is_gnome()` - Check for GNOME desktop
-- `is_hyprland()` - Check for Hyprland compositor
-- `is_macos()` - Check for macOS
-- `is_linux()` - Check for Linux
+- Functions: `snake_case` (`install_config_files`, `run_installation`).
+- Local variables: `lower_snake_case` and declare with `local`.
+- Globals/constants/flags: `UPPER_CASE` (`DRY_RUN`, `DOTFILES_DIR`).
+- Arrays: plural and intent-revealing names (`packages`, `failed`).
+- Keep names concise and specific; avoid verbose boolean-style names.
 
-**Multi-Distro Support:**
-- Use `detect_os()` from lib.sh - returns `ubuntu`, `debian`, `arch`, or `macos`
-- Use `get_package_manager()` - returns `apt`, `yay`, `pacman`, `brew`, or `none`
-- Support Ubuntu/Debian (apt) and Arch (yay/pacman) at minimum
-- Use associative arrays for package lists per distro
+## 4) Formatting and Structure
 
-### Zsh Configuration
+- Match existing file formatting (many shell files use tabs).
+- Prefer multiline `if` and `case` blocks over dense one-liners.
+- Keep functions single-purpose where practical.
+- Avoid unnecessary wrappers for trivial behavior.
+- Add comments only when they explain intent that code cannot show directly.
 
-**File Organization:**
-- Split into focused files: `envs`, `aliases`, `functions`, `binds`, `init`
-- Platform-specific: `ubuntu`, `macos`, `omarchy`
-- Main entry: `rc` sources all components
+## 5) Error Handling and Logging
 
-**Style:**
-- Use `setopt` for configuration (not `set -o`)
-- Aliases in `aliases` file, functions in `functions` file
-- End files with: `# vi: ft=zsh`
-- Use double brackets for conditionals: `[[ -d ~/.local/share/omarchy ]]`
+- In functions, prefer `return`; reserve `exit` for top-level script flow.
+- Check dependencies with `command -v <cmd> >/dev/null 2>&1`.
+- Reuse logging helpers from `packages/lib.sh`:
+  - `log_info`
+  - `log_success`
+  - `log_warn`
+  - `log_error`
+  - `log_debug` (only meaningful when `DEBUG=true`)
+- Avoid ad-hoc `echo` status lines when a logger exists.
+- Error messages should include operation context and target.
 
-### General File Patterns
+## 6) Idempotency and Safety
 
-**Config Files:**
-- TOML: `config.toml`, `languages.toml`
-- YAML: `config.yml`, `theme.yml`
-- JSON: `settings.json`, `config.json`
-- All config files should end with vi modeline: `# vi: ft=<filetype>`
+- Assume install commands may run repeatedly.
+- Preserve idempotency; avoid duplicate appends and unsafe rewrites.
+- Respect `DRY_RUN=true`; do not mutate files in dry-run mode.
+- Prefer existing helpers like `backup_if_exists` and `create_symlink`.
 
-**Script Locations:**
-- `apps/` - Application installers (Flatpak, Docker, VS Code, etc.)
-- `installers/` - Tool setup scripts (tmux, oh-my-zsh, mise, etc.)
-- `packages/` - System package installation
-- `scripts/` - Utility scripts copied to ~/.local/scripts/
-- `utils/` - One-off utility scripts
-- `gnome/` - GNOME desktop configuration
-- `lib/` - Core library modules for install script
+## 7) Platform-Aware Logic
 
-## Backup and Restore
+- Reuse existing helpers instead of open-coding OS checks:
+  - `detect_os`, `get_package_manager`, `is_macos`, `is_linux`
+  - `is_omarchy`, `is_kool`, `is_gnome`, `is_hyprland`
+- Keep cross-platform behavior aligned unless a task requires divergence.
 
-The install script automatically backs up existing files before creating symlinks:
-- Backups are named: `_{filename}.backup`, `_{filename}.backup.1`, etc.
-- Located in the same directory as the original file
-- Restore with: `make restore` or `./install --restore`
+## 8) Validation Workflow for Agent Changes
 
-## Logging
+When editing this repo, do the smallest safe change and validate it.
 
-All installation actions are logged to `~/.dotfiles-install.log`:
-- View with: `cat ~/.dotfiles-install.log`
-- Includes timestamps and status messages
-- Useful for debugging installation issues
+1. Run `bash -n <changed-file>` for each touched shell file.
+2. Run `make validate` for broader script/library edits.
+3. Run a relevant dry-run, for example `./install --dry-run --config`.
+4. Update docs when changing flags, profiles, or install behavior.
 
-## Git Workflow
+## Quick Completion Checklist
 
-- Only use git commands when explicitly requested by user
-- Submodules: nvim config, tmux plugins - run `git submodule update --init --recursive`
-- Update submodules with: `make update-nvim` or `make update-submodules`
-
-## Important Notes
-
-- Repository supports Ubuntu/Debian and Arch Linux primarily
-- Uses Catppuccin Mocha theme consistently across tools
-- Uses Nord theme for Hyprland and Ghostty configurations
-- Heavy focus on terminal/CLI tooling (tmux, zsh, fzf, Helix, ghostty)
-- Wayland/Hyprland oriented with configs for waybar, rofi, swaync
-- Kool Hyprland support with automatic waybar layout/style configuration
-- `set +h` in zsh rc disables command hashing for mise compatibility
-- The `install` script is the main orchestrator - always use it for changes
-- Uses symlinks instead of copying files for easy updates
-- Pre-flight checks validate OS and essential dependencies before running
-- Dry-run mode (`--dry-run`) previews all changes without applying them
-- All shell scripts must pass `bash -n` syntax validation
+- Validation commands executed for touched scripts.
+- No unrelated files modified.
+- No secrets or credentials introduced.
+- Dry-run path still works for changed flow.
