@@ -1,11 +1,12 @@
 .PHONY: help install install-all install-minimal install-omarchy install-config install-user install-installers install-packages install-apps install-local-scripts install-xcompose-overrides update-dotfiles update-nvim update-submodules check restore clean validate
 
 # Colors for output
-BLUE := \033[0;34m
-GREEN := \033[0;32m
-YELLOW := \033[1;33m
-RED := \033[0;31m
-NC := \033[0m
+ESC := $(shell printf '\033')
+BLUE := $(ESC)[0;34m
+GREEN := $(ESC)[0;32m
+YELLOW := $(ESC)[1;33m
+RED := $(ESC)[0;31m
+NC := $(ESC)[0m
 
 # Default target
 help:
@@ -136,7 +137,7 @@ update-dotfiles:
 # Update nvim submodule to latest commit and commit the reference
 update-nvim:
 	@echo "$(BLUE)[INFO]$(NC) Updating nvim submodule..."
-	@git submodule update --remote config-files/nvim
+	@git submodule update --init --remote config-files/nvim
 	@git add config-files/nvim
 	@git diff --cached --quiet && echo "$(YELLOW)[WARN]$(NC) No changes to commit" || git commit -m "Update nvim submodule to latest commit"
 	@echo "$(GREEN)[SUCCESS]$(NC) Nvim submodule updated"
@@ -144,7 +145,7 @@ update-nvim:
 # Update all submodules
 update-submodules:
 	@echo "$(BLUE)[INFO]$(NC) Updating all git submodules..."
-	@git submodule update --remote
+	@git submodule update --init --recursive --remote
 	@for submodule in $$(git submodule | awk '{print $$2}'); do \
 		git add "$$submodule" 2>/dev/null || true; \
 	done
