@@ -11,15 +11,17 @@ source "$SCRIPT_DIR/lib/core.sh"
 # --- Shell Check ---
 check_shell_is_zsh() {
 	local current_shell
-	current_shell="$(ps -p $$ -o comm=)"
+	current_shell="$(ps -p $$ -o comm= | tr -d '[:space:]')"
+	local default_shell
+	default_shell="${SHELL##*/}"
 
-	if [[ "$current_shell" != "zsh" ]]; then
-		log_error "This script must be run from zsh shell. Current shell: $current_shell"
-		log_info "Please run: zsh $0"
-		return 1
+	if [[ "$current_shell" == "zsh" ]] || [[ "$default_shell" == "zsh" ]]; then
+		log_success "Shell check passed (current: ${current_shell:-unknown}, default: ${default_shell:-unknown})"
+		return 0
 	fi
 
-	log_success "Running in zsh shell"
+	log_warn "zsh is recommended for this setup (current: ${current_shell:-unknown}, default: ${default_shell:-unknown})"
+	log_info "Continue as-is, or switch with: exec zsh"
 	return 0
 }
 

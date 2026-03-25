@@ -141,11 +141,11 @@ is_omarchy() {
 }
 
 is_gnome() {
-	[[ "$XDG_CURRENT_DESKTOP" == *"GNOME"* ]] || [[ "$XDG_SESSION_DESKTOP" == *"gnome"* ]]
+	[[ "${XDG_CURRENT_DESKTOP:-}" == *"GNOME"* ]] || [[ "${XDG_SESSION_DESKTOP:-}" == *"gnome"* ]]
 }
 
 is_hyprland() {
-	[[ "$XDG_CURRENT_DESKTOP" == "Hyprland" ]] || [[ "$XDG_SESSION_DESKTOP" == "hyprland" ]] || [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]
+	[[ "${XDG_CURRENT_DESKTOP:-}" == "Hyprland" ]] || [[ "${XDG_SESSION_DESKTOP:-}" == "hyprland" ]] || [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]
 }
 
 is_kool() {
