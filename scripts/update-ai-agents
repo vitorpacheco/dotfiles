@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # AI Agents Updater Script
-# Updates: claude code, codex, opencode, qwen coder, kimi code, aider, gemini, cursor, antigravity, kiro ide, kiro cli, windsurf
+# Updates: claude code, codex, opencode, qwen coder, kimi code, aider, gemini, pi coding agent, cursor, antigravity, kiro ide, kiro cli, windsurf
 
 set -uo pipefail
 
@@ -17,14 +17,14 @@ BOLD='\033[1m'
 DIM='\033[2m'
 
 # Counters
-TOTAL_AGENTS=12
+TOTAL_AGENTS=13
 UPDATED=0
 ALREADY_LATEST=0
 SKIPPED=0
 FAILED=0
 APPROVE_MACOS=false
 
-TOOLS="claude codex opencode qwen gemini aider kimi cursor windsurf antigravity kiro kiro-cli"
+TOOLS="claude codex opencode qwen gemini aider kimi pi cursor windsurf antigravity kiro kiro-cli"
 
 # Detect OS/distro
 detect_os() {
@@ -601,6 +601,37 @@ update_kimi() {
     fi
 }
 
+update_pi() {
+    print_agent_start "PI Coding Agent" "checking and updating"
+
+    if command -v pi &> /dev/null; then
+        echo -e "  ${DIM}Current:${NC} $(pi --version 2>/dev/null)"
+        echo -e "  ${DIM}Installation:${NC} npm global"
+        local old_version=$(get_version "pi")
+        if has_npm_update "@mariozechner/pi-coding-agent"; then
+            echo -e "  ${DIM}Running:${NC} npm update -g @mariozechner/pi-coding-agent"
+            npm update -g @mariozechner/pi-coding-agent 2>&1 | while read line; do
+                echo -e "  ${DIM}>${NC} $line"
+            done
+        else
+            echo -e "  ${DIM}>${NC} No newer version available for @mariozechner/pi-coding-agent"
+        fi
+        local new_version=$(get_version "pi")
+        if [ "$old_version" != "$new_version" ] && [ "$new_version" != "unknown" ]; then
+            print_agent_result "updated" "($old_version → $new_version)"
+            UPDATED=$((UPDATED + 1))
+        else
+            print_agent_result "latest" "($new_version)"
+            ALREADY_LATEST=$((ALREADY_LATEST + 1))
+        fi
+
+        approve_macos_binary "PI Coding Agent" "pi"
+    else
+        print_agent_result "skipped" ""
+        SKIPPED=$((SKIPPED + 1))
+    fi
+}
+
 update_cursor() {
     print_agent_start "Cursor" "checking installation"
 
@@ -783,6 +814,7 @@ show_help() {
     echo -e "  gemini         Gemini CLI"
     echo -e "  aider          Aider"
     echo -e "  kimi           Kimi Code"
+    echo -e "  pi             PI Coding Agent"
     echo -e "  cursor         Cursor"
     echo -e "  windsurf       Windsurf"
     echo -e "  antigravity    Antigravity"
@@ -826,6 +858,10 @@ update_single() {
         kimi)
             TOTAL_AGENTS=1
             update_kimi
+            ;;
+        pi)
+            TOTAL_AGENTS=1
+            update_pi
             ;;
         cursor)
             TOTAL_AGENTS=1
@@ -871,7 +907,7 @@ main() {
             all)
                 selected_tool="all"
                 ;;
-            claude|codex|opencode|qwen|gemini|aider|kimi|cursor|windsurf|antigravity|kiro|kiro-cli)
+            claude|codex|opencode|qwen|gemini|aider|kimi|pi|cursor|windsurf|antigravity|kiro|kiro-cli)
                 if [[ "$selected_tool" != "all" ]] && [[ "$selected_tool" != "$arg" ]]; then
                     echo -e "\n${RED}${BOLD}✗ Error:${NC} Please provide only one tool at a time"
                     echo -e "${DIM}Run 'update-ai-agents --help' for usage${NC}\n"
@@ -920,6 +956,7 @@ main() {
         update_gemini
         update_aider
         update_kimi
+        update_pi
         update_cursor
         update_windsurf
         update_antigravity
