@@ -23,6 +23,7 @@
 # MODEL FLAGS (for <model> command)
 #   --host HOST         Bind address (default: 0.0.0.0)
 #   --port N            Override the model's default port
+#   --api-key KEY       Require this key on all requests
 #   --reasoning         Enable thinking/reasoning mode (Qwen3 family only)
 #   --no-reasoning      Disable reasoning mode (default)
 #   --draft             Enable speculative decoding with the model's draft model
@@ -78,6 +79,7 @@ DEFAULT_THREADS_HTTP="4"
 DEFAULT_PARALLEL="8"
 DEFAULT_BENCH_REQUESTS="10"
 DEFAULT_BENCH_N_PREDICT="256"
+DEFAULT_API_KEY=""
 
 # Load configuration from shell-compatible .conf file
 # Config file uses simple KEY=VALUE format with variable expansion
@@ -108,6 +110,7 @@ LLAMA_THREADS_HTTP="${LLAMA_THREADS_HTTP:-${THREADS_HTTP:-$DEFAULT_THREADS_HTTP}
 LLAMA_PARALLEL="${LLAMA_PARALLEL:-${PARALLEL:-$DEFAULT_PARALLEL}}"
 BENCH_REQUESTS="${BENCH_REQUESTS:-${BENCH_REQUESTS_CONF:-$DEFAULT_BENCH_REQUESTS}}"
 BENCH_N_PREDICT="${BENCH_N_PREDICT:-${BENCH_N_PREDICT_CONF:-$DEFAULT_BENCH_N_PREDICT}}"
+LLAMA_API_KEY="${LLAMA_API_KEY:-${API_KEY:-$DEFAULT_API_KEY}}"
 
 # Skip binary detection for setup (binary may not exist yet)
 if [[ "${1:-}" != "setup" ]]; then
@@ -686,6 +689,13 @@ BENCH_REQUESTS_CONF=10
 
 # Number of tokens to predict per request
 BENCH_N_PREDICT_CONF=256
+
+# ============================================================================
+# Security
+# ============================================================================
+
+# API key required to access the server (leave empty to disable)
+API_KEY=
 EOF
     echo "Created: $CONFIG_FILE"
     echo "Edit this file to customize default settings."
@@ -717,6 +727,7 @@ Flags:
   --update            check for a newer GGUF on HuggingFace and re-download if found
   --host HOST         bind address (default: 0.0.0.0)
   --port N            override default port (default: 8084)
+  --api-key KEY       require this key on all requests
 
 Configuration:
   Config file: ~/.config/llm-server/config.conf
@@ -774,8 +785,9 @@ UPDATE=0
 PASSTHRU=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-  --host)         HOST="$2";    shift 2 ;;
-  --port)         PORT="$2";    shift 2 ;;
+  --host)         HOST="$2";           shift 2 ;;
+  --port)         PORT="$2";           shift 2 ;;
+  --api-key)      LLAMA_API_KEY="$2";  shift 2 ;;
   --reasoning)    REASONING=1;  shift   ;;
   --no-reasoning) REASONING=0;  shift   ;;
   --draft)        DRAFT=1;      shift   ;;
@@ -797,6 +809,10 @@ REASONING_ARGS=()
 if printf '%s\n' "${REASONING_MODELS[@]}" | grep -qx "$MODEL"; then
   [[ $REASONING -eq 0 ]] && REASONING_ARGS=(--reasoning-budget 0)
 fi
+
+# API key
+API_KEY_ARGS=()
+[[ -n "$LLAMA_API_KEY" ]] && API_KEY_ARGS=(--api-key "$LLAMA_API_KEY")
 
 # Speculative decoding
 DRAFT_ARGS=()
@@ -837,6 +853,7 @@ exec "$LLAMA_SERVER" \
   ${=MODEL_ARGS[$MODEL]} \
   "${REASONING_ARGS[@]}" \
   "${DRAFT_ARGS[@]}" \
+  "${API_KEY_ARGS[@]}" \
   --host "$HOST" \
   --port "$PORT" \
   "${PASSTHRU[@]}"

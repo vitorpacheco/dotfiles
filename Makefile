@@ -1,4 +1,4 @@
-.PHONY: help install install-all install-minimal install-omarchy install-config install-user install-installers install-packages install-apps install-local-scripts install-xcompose-overrides update-dotfiles update-nvim update-submodules check restore clean validate
+.PHONY: help install install-all install-minimal install-omarchy install-config install-user install-installers install-packages install-apps install-local-scripts install-xcompose-overrides install-macos-config update-dotfiles update-nvim update-submodules check restore clean validate
 
 # Colors for output
 ESC := $(shell printf '\033')
@@ -23,6 +23,7 @@ help:
 	@echo "  make install-apps      - Install applications"
 	@echo "  make install-local-scripts - Symlink scripts to ~/.local/scripts/"
 	@echo "  make install-xcompose-overrides - Setup xcompose overrides for cedilla typing"
+	@echo "  make install-macos-config  - Install macOS configs and restart yabai/skhd services"
 	@echo ""
 	@echo "$(GREEN)Maintenance Commands:$(NC)"
 	@echo "  make update-dotfiles   - Pull latest changes and update submodules"
@@ -48,6 +49,16 @@ install:
 install-xcompose-overrides:
 	@echo "$(BLUE)[INFO]$(NC) Setting up xcompose overrides..."
 	@./scripts/setup-xcompose-overrides
+
+# Install macOS configs and restart services
+install-macos-config:
+	@echo "$(BLUE)[INFO]$(NC) Installing macOS configs (yabai, skhd)..."
+	@./install --macos-config
+	@echo "$(BLUE)[INFO]$(NC) Reloading skhd..."
+	@skhd --reload 2>/dev/null || echo "$(YELLOW)[WARN]$(NC) Could not reload skhd (may not be running)"
+	@echo "$(BLUE)[INFO]$(NC) Restarting yabai..."
+	@yabai --restart-service 2>/dev/null || echo "$(YELLOW)[WARN]$(NC) Could not restart yabai service"
+	@echo "$(GREEN)[SUCCESS]$(NC) macOS configs installed and services restarted"
 
 # Install everything
 install-all:

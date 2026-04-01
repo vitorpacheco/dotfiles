@@ -559,4 +559,37 @@ install_xcompose_overrides() {
 	log_success "Xcompose overrides installed"
 }
 
+# --- macOS Configs ---
+
+install_macos_configs() {
+	if ! is_macos; then
+		log_info "macOS configs are macOS-only, skipping on Linux"
+		return 0
+	fi
+
+	log_info "Installing macOS-specific configs (yabai, skhd)..."
+
+	# Install yabai config
+	local yabai_source="$DOTFILES_DIR/config-files/yabai/yabairc"
+	local yabai_dest="$HOME/.yabairc"
+
+	if [[ -f "$yabai_source" ]]; then
+		create_symlink "$yabai_source" "$yabai_dest"
+		log_success "Installed yabai config"
+	else
+		log_warn "yabai config not found at $yabai_source"
+	fi
+
+	# Install skhd config
+	local skhd_source="$DOTFILES_DIR/config-files/skhd/skhdrc"
+	local skhd_dest="$HOME/.skhdrc"
+
+	if [[ -f "$skhd_source" ]]; then
+		create_symlink "$skhd_source" "$skhd_dest"
+		log_success "Installed skhd config"
+	else
+		log_warn "skhd config not found at $skhd_source"
+	fi
+}
+
 # vi: ft=bash

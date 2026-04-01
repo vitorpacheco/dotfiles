@@ -48,6 +48,7 @@ show_help() {
 	echo "  --icons              Execute icons/install.sh (Linux only)"
 	echo "  --omarchy-overrides  Install Omarchy-specific overrides only (tmux, hyprland)"
 	echo "  --kool-overrides     Install Kool Hyprland overrides only (tmux, hyprland, ghostty)"
+	echo "  --macos-config       Install macOS-specific configs (yabai, skhd)"
 	echo ""
 	log_info "Utility Scripts (from utils/):"
 	echo "  --utils=\"script1.sh,script2.sh\" Execute specific utility scripts"

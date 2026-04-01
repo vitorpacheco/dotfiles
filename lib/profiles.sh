@@ -22,6 +22,7 @@ INSTALL_PACKAGES=false
 INSTALL_LOCAL_SCRIPTS=false
 INSTALL_OMARCHY_OVERRIDES=false
 INSTALL_KOOL_OVERRIDES=false
+INSTALL_MACOS_CONFIGS=false
 CHECK_HEALTH=false
 RESTORE=false
 UTILITY_SCRIPTS=""
@@ -80,6 +81,9 @@ parse_arguments() {
 			;;
 		--kool-overrides)
 			INSTALL_KOOL_OVERRIDES=true
+			;;
+		--macos-config)
+			INSTALL_MACOS_CONFIGS=true
 			;;
 		--utils=*)
 			UTILITY_SCRIPTS="${arg#*=}"
@@ -166,6 +170,7 @@ run_installation() {
 	if [[ "$INSTALL_CONFIG" == true ]]; then
 		install_nvim_config
 		install_config_files
+		install_macos_configs
 	fi
 
 	if [[ "$INSTALL_USER_CONFIG" == true ]]; then
@@ -202,6 +207,10 @@ run_installation() {
 
 	if [[ "$INSTALL_KOOL_OVERRIDES" == true ]]; then
 		install_kool_overrides
+	fi
+
+	if [[ "$INSTALL_MACOS_CONFIGS" == true ]]; then
+		install_macos_configs
 	fi
 
 	execute_utils "$UTILITY_SCRIPTS"

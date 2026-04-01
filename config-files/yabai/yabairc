@@ -1,0 +1,130 @@
+#!/usr/bin/env sh
+
+#
+# for this to work you must configure sudo such that
+# it will be able to run the command without password
+#
+# see this wiki page for information:
+#  - https://github.com/asmvik/yabai/wiki/Installing-yabai-(latest-release)#configure-scripting-addition
+#
+# yabai -m signal --add event=dock_did_restart action="sudo yabai --load-sa"
+# sudo yabai --load-sa
+#
+
+sudo yabai --load-sa
+yabai -m signal --add event=dock_did_restart action="sudo yabai --load-sa"
+
+# global settings
+yabai -m config                                 \
+    external_bar                 off:40:0       \
+    menubar_opacity              1.0            \
+    mouse_follows_focus          on             \
+    focus_follows_mouse          autofocus      \
+    display_arrangement_order    default        \
+    window_origin_display        focused        \
+    window_placement             second_child   \
+    window_insertion_point       focused        \
+    window_zoom_persist          on             \
+    window_shadow                on             \
+    window_animation_duration    0.0            \
+    window_animation_easing      ease_out_circ  \
+    window_opacity_duration      0.0            \
+    active_window_opacity        1.0            \
+    normal_window_opacity        0.90           \
+    window_opacity               off            \
+    insert_feedback_color        0xffd75f5f     \
+    split_ratio                  0.50           \
+    split_type                   off            \
+    auto_balance                 on             \
+    top_padding                  12             \
+    bottom_padding               12             \
+    left_padding                 12             \
+    right_padding                12             \
+    window_gap                   06             \
+    layout                       bsp            \
+    mouse_modifier               fn             \
+    mouse_action1                move           \
+    mouse_action2                resize         \
+    mouse_drop_action            swap
+
+# Space management
+# MacBook only:  spaces 1-9 on display 1
+# Dual display:  spaces 1-5 on display 1, spaces 6-9 on display 2
+
+# Display labels (robust targeting regardless of arrangement index changes)
+DISPLAY_COUNT=$(yabai -m query --displays | jq 'length')
+yabai -m display 1 --label macbook
+if [ "$DISPLAY_COUNT" -ge 2 ]; then
+    yabai -m display 2 --label external
+fi
+
+_setup_spaces() {
+    for i in $(seq 1 9); do
+        yabai -m query --spaces --space "$i" &>/dev/null || yabai -m space --create
+    done
+    DISPLAY_COUNT=$(yabai -m query --displays | jq 'length')
+    if [ "$DISPLAY_COUNT" -ge 2 ]; then
+        for i in 6 7 8 9; do
+            yabai -m space "$i" --display external
+        done
+    fi
+}
+
+_setup_spaces
+
+# On external monitor connect: label it and move spaces 6-9 to it
+yabai -m signal --add event=display_added \
+    action="sleep 1; \
+            yabai -m display 2 --label external; \
+            for i in \$(seq 1 9); do yabai -m query --spaces --space \"\$i\" &>/dev/null || yabai -m space --create; done; \
+            for i in 6 7 8 9; do yabai -m space \"\$i\" --display external; done"
+
+# On external monitor disconnect: ensure all 9 spaces exist on display 1
+yabai -m signal --add event=display_removed \
+    action="sleep 1; \
+            for i in \$(seq 1 9); do yabai -m query --spaces --space \"\$i\" &>/dev/null || yabai -m space --create; done"
+
+# On display rearrangement: re-assign spaces 6-9 to the external display
+yabai -m signal --add event=display_moved \
+    action="sleep 1; \
+            for i in 6 7 8 9; do yabai -m space \"\$i\" --display external; done"
+
+# After wake from sleep: re-label displays and redistribute spaces
+yabai -m signal --add event=system_woke \
+    action="sleep 2; \
+            yabai -m display 1 --label macbook; \
+            DISPLAY_COUNT=\$(yabai -m query --displays | jq 'length'); \
+            if [ \"\$DISPLAY_COUNT\" -ge 2 ]; then yabai -m display 2 --label external; fi; \
+            for i in \$(seq 1 9); do yabai -m query --spaces --space \"\$i\" &>/dev/null || yabai -m space --create; done; \
+            if [ \"\$DISPLAY_COUNT\" -ge 2 ]; then for i in 6 7 8 9; do yabai -m space \"\$i\" --display external; done; fi"
+
+# System / macOS
+yabai -m rule --add app="^System Settings$" manage=off
+yabai -m rule --add app="^Calculator$" manage=off
+yabai -m rule --add app="^Finder$" manage=off
+yabai -m rule --add app="^Archive Utility$" manage=off
+yabai -m rule --add app="^Disk Utility$" manage=off
+yabai -m rule --add app="^Activity Monitor$" manage=off
+yabai -m rule --add app="^Font Book$" manage=off
+yabai -m rule --add app="^App Store$" manage=off
+yabai -m rule --add app="^Clock$" manage=off
+yabai -m rule --add app="^Digital Colou?r Meter$" sticky=on
+yabai -m rule --add title="^Picture in Picture$" sticky=on manage=off
+
+# Raycast / Bitwarden
+yabai -m rule --add app="^Raycast$" title="^Raycast Settings$" manage=off
+yabai -m rule --add app="^Bitwarden$" manage=off
+yabai -m rule --add app="^Bitwarden$" title="Extension:" manage=off
+yabai -m rule --add app="^Zen$" title="Bitwarden$" manage=off
+
+# 1Password
+yabai -m rule --add app="^1Password$" manage=off
+yabai -m rule --add app="^1Password 7$" manage=off
+
+# Xcode
+yabai -m rule --add app="^Simulator$" manage=off
+
+# JetBrains IDEs
+# yabai -m rule --add app="^(IntelliJ IDEA|DataGrip|WebStorm|GoLand)$" title="^$" manage=off
+
+echo "yabai configuration loaded.."
