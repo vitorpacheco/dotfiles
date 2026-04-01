@@ -4,3 +4,5 @@
 **/Code/DIPS-wal
 **/Code/SharedStorage-wal
 **/Code/code.lock
+*.pyc
+

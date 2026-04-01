@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """
 Convert Bitwarden JSON export to KeePassXC KDBX format using pykeepass.
+Supports upsert: updates existing entries or creates new ones.
 """
 
 import sys
@@ -15,73 +16,105 @@ def sanitize_string(value):
     """Sanitize string for XML compatibility - remove control characters."""
     if value is None:
         return ""
-    # Remove control characters except tabs, newlines, and carriage returns
     value = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f-\x9f]", "", str(value))
     return value
 
 
-def get_unique_entry_name(kp, group, base_name, counter=0):
+def get_unique_name(kp, group, base_name, counter=0):
     """Generate unique entry name to avoid duplicates."""
     name = base_name if counter == 0 else f"{base_name} ({counter})"
-    # Check if entry exists in group
     existing = kp.find_entries(title=name, group=group, first=True)
     if existing:
-        return get_unique_entry_name(kp, group, base_name, counter + 1)
+        return get_unique_name(kp, group, base_name, counter + 1)
     return name
 
 
-def create_entry_from_login(kp, entry_data, group):
-    """Create a KeePass entry from Bitwarden login item."""
+def find_entry_in_group(kp, group, base_name, counter=0):
+    """Find existing entry by name in group. Returns (entry, name) if found, (None, unique_name) if not."""
+    name = base_name if counter == 0 else f"{base_name} ({counter})"
+    existing = kp.find_entries(title=name, group=group, first=True)
+    if existing:
+        return existing, name
+    if counter > 0:
+        return None, name
+    next_name = f"{base_name} ({counter + 1})"
+    next_entry = kp.find_entries(title=next_name, group=group, first=True)
+    if next_entry:
+        return find_entry_in_group(kp, group, base_name, counter + 1)
+    return None, name
+
+
+def upsert_login_entry(kp, entry_data, group):
+    """Update existing or create new login entry. Returns (updated, created)."""
     raw_name = entry_data.get("name") or "Unnamed"
-    name = get_unique_entry_name(kp, group, sanitize_string(raw_name))
+    base_name = sanitize_string(raw_name)
+
+    existing_entry, unique_name = find_entry_in_group(kp, group, base_name)
     login = entry_data.get("login") or {}
 
     username = sanitize_string(login.get("username") or "")
     password = sanitize_string(login.get("password") or "")
-
-    # Get URL
     urls = login.get("uris", [])
     url = sanitize_string(urls[0].get("uri", "")) if urls else ""
-
-    # Get notes
     notes = sanitize_string(entry_data.get("notes") or "")
 
-    # Create entry
-    entry = kp.add_entry(group, name, username, password, url=url, notes=notes)
+    if existing_entry:
+        existing_entry.username = username
+        existing_entry.password = password
+        existing_entry.url = url
+        existing_entry.notes = notes
+        existing_entry.set_custom_property("TOTP Seed", "")
+        for key in list(existing_entry.custom_properties.keys()):
+            if key != "TOTP Seed":
+                try:
+                    existing_entry.delete_custom_property(key)
+                except Exception:
+                    pass
+        totp = login.get("totp")
+        if totp:
+            existing_entry.set_custom_property("TOTP Seed", sanitize_string(totp))
+        for field in entry_data.get("fields", []) or []:
+            field_name = sanitize_string(field.get("name") or "Custom Field")
+            field_value = sanitize_string(field.get("value") or "")
+            if field_name and field_value:
+                existing_entry.set_custom_property(field_name, field_value)
+        return True, False
 
-    # Add custom fields (TOTP, etc.)
+    entry = kp.add_entry(group, unique_name, username, password, url=url, notes=notes)
     totp = login.get("totp")
     if totp:
         entry.set_custom_property("TOTP Seed", sanitize_string(totp))
-
-    # Add other fields
     for field in entry_data.get("fields", []) or []:
         field_name = sanitize_string(field.get("name") or "Custom Field")
         field_value = sanitize_string(field.get("value") or "")
         if field_name and field_value:
             entry.set_custom_property(field_name, field_value)
+    return False, True
 
-    return entry
 
-
-def create_entry_from_note(kp, entry_data, group):
-    """Create a KeePass entry from Bitwarden secure note."""
+def upsert_note_entry(kp, entry_data, group):
+    """Update existing or create new secure note entry."""
     raw_name = entry_data.get("name") or "Unnamed Note"
-    name = get_unique_entry_name(kp, group, sanitize_string(raw_name))
+    base_name = sanitize_string(raw_name)
+
+    existing_entry, unique_name = find_entry_in_group(kp, group, base_name)
     notes = sanitize_string(entry_data.get("notes") or "")
 
-    # Create entry with no password
-    entry = kp.add_entry(group, name, "", "", notes=notes)
+    if existing_entry:
+        existing_entry.notes = notes
+        return True, False
 
-    return entry
+    kp.add_entry(group, unique_name, "", "", notes=notes)
+    return False, True
 
 
-def create_entry_from_card(kp, entry_data, group):
-    """Create a KeePass entry from Bitwarden card item."""
+def upsert_card_entry(kp, entry_data, group):
+    """Update existing or create new card entry."""
     raw_name = entry_data.get("name") or "Unnamed Card"
-    name = get_unique_entry_name(kp, group, sanitize_string(raw_name))
-    card = entry_data.get("card") or {}
+    base_name = sanitize_string(raw_name)
 
+    existing_entry, unique_name = find_entry_in_group(kp, group, base_name)
+    card = entry_data.get("card") or {}
     notes = sanitize_string(entry_data.get("notes") or "")
     cardholder = sanitize_string(card.get("cardholderName") or "")
     number = sanitize_string(card.get("number") or "")
@@ -89,7 +122,6 @@ def create_entry_from_card(kp, entry_data, group):
     exp_year = sanitize_string(str(card.get("expYear") or ""))
     code = sanitize_string(card.get("code") or "")
 
-    # Build notes with card info
     card_info = f"""Cardholder: {cardholder}
 Number: {number}
 Expiry: {exp_month}/{exp_year}
@@ -97,19 +129,25 @@ Security Code: {code}
 
 {notes}"""
 
-    entry = kp.add_entry(group, name, cardholder, code, notes=card_info)
+    if existing_entry:
+        existing_entry.username = cardholder
+        existing_entry.password = code
+        existing_entry.notes = card_info
+        return True, False
 
-    return entry
+    kp.add_entry(group, unique_name, cardholder, code, notes=card_info)
+    return False, True
 
 
-def create_entry_from_identity(kp, entry_data, group):
-    """Create a KeePass entry from Bitwarden identity item."""
+def upsert_identity_entry(kp, entry_data, group):
+    """Update existing or create new identity entry."""
     raw_name = entry_data.get("name") or "Unnamed Identity"
-    name = get_unique_entry_name(kp, group, sanitize_string(raw_name))
+    base_name = sanitize_string(raw_name)
+
+    existing_entry, unique_name = find_entry_in_group(kp, group, base_name)
     identity = entry_data.get("identity") or {}
     notes = sanitize_string(entry_data.get("notes") or "")
 
-    # Build identity info
     identity_info = f"""Title: {sanitize_string(identity.get("title") or "")}
 First Name: {sanitize_string(identity.get("firstName") or "")}
 Middle Name: {sanitize_string(identity.get("middleName") or "")}
@@ -129,15 +167,19 @@ License: {sanitize_string(identity.get("licenseNumber") or "")}
 
 {notes}"""
 
-    entry = kp.add_entry(
+    if existing_entry:
+        existing_entry.username = sanitize_string(identity.get("email") or "")
+        existing_entry.notes = identity_info
+        return True, False
+
+    kp.add_entry(
         group,
-        name,
+        unique_name,
         sanitize_string(identity.get("email") or ""),
         "",
         notes=identity_info,
     )
-
-    return entry
+    return False, True
 
 
 def get_or_create_group(kp, folder_name):
@@ -145,31 +187,30 @@ def get_or_create_group(kp, folder_name):
     if not folder_name or folder_name == "No Folder":
         return kp.root_group
 
-    # Sanitize folder name
     folder_name = sanitize_string(folder_name)
 
-    # Try to find existing group
     for group in kp.groups:
         if group.name == folder_name:
             return group
 
-    # Create new group
     return kp.add_group(kp.root_group, folder_name)
 
 
-def convert_bitwarden_to_keepass(json_path, kdbx_path, password):
-    """Convert Bitwarden JSON export to KDBX database."""
+def convert_bitwarden_to_keepass(
+    json_path, kdbx_path, password, existing_kdbx_path=None
+):
+    """Convert Bitwarden JSON export to KDBX database with upsert behavior."""
 
-    # Load Bitwarden JSON
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
 
-    # Create new KDBX database
-    kp = create_database(kdbx_path, password=password)
+    if existing_kdbx_path and os.path.exists(existing_kdbx_path):
+        kp = PyKeePass(existing_kdbx_path, password=password)
+    else:
+        kp = create_database(kdbx_path, password=password)
 
-    # Process folders first to create groups
     folders = data.get("folders") or []
-    folder_map = {"": kp.root_group, None: kp.root_group}  # Map folder ID to group
+    folder_map = {"": kp.root_group, None: kp.root_group}
 
     for folder in folders:
         folder_name = folder.get("name") or ""
@@ -178,49 +219,50 @@ def convert_bitwarden_to_keepass(json_path, kdbx_path, password):
             group = get_or_create_group(kp, folder_name)
             folder_map[folder_id] = group
 
-    # Process items
     items = data.get("items") or []
 
-    imported_count = 0
+    updated_count = 0
+    created_count = 0
     for item in items:
-        item_type = item.get("type") or 1  # 1 = login by default
+        item_type = item.get("type") or 1
         folder_id = item.get("folderId")
-
-        # Get the appropriate group
         group = folder_map.get(folder_id, kp.root_group)
 
-        # Create entry based on type
-        # Bitwarden types: 1=login, 2=secure note, 3=card, 4=identity
         try:
             if item_type == 1:
-                create_entry_from_login(kp, item, group)
+                updated, created = upsert_login_entry(kp, item, group)
             elif item_type == 2:
-                create_entry_from_note(kp, item, group)
+                updated, created = upsert_note_entry(kp, item, group)
             elif item_type == 3:
-                create_entry_from_card(kp, item, group)
+                updated, created = upsert_card_entry(kp, item, group)
             elif item_type == 4:
-                create_entry_from_identity(kp, item, group)
+                updated, created = upsert_identity_entry(kp, item, group)
             else:
-                # Unknown type, treat as note
-                create_entry_from_note(kp, item, group)
-            imported_count += 1
+                updated, created = upsert_note_entry(kp, item, group)
+
+            if updated:
+                updated_count += 1
+            if created:
+                created_count += 1
         except Exception as e:
             item_name = item.get("name") or "unnamed"
-            print(
-                f"Warning: Failed to import item '{item_name}': {e}",
-                file=sys.stderr,
-            )
+            print(f"Warning: Failed to import item '{item_name}': {e}", file=sys.stderr)
             continue
 
-    # Save database
     kp.save()
-    print(f"Successfully imported {imported_count}/{len(items)} items into {kdbx_path}")
+    print(
+        f"Upserted {updated_count} entries, created {created_count} new entries into {kdbx_path}"
+    )
+    if updated_count > 0:
+        print(f"Updated {updated_count} existing entries")
+    if created_count > 0:
+        print(f"Created {created_count} new entries")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 4:
+    if len(sys.argv) < 4:
         print(
-            "Usage: bw-to-keepass.py <bitwarden.json> <output.kdbx> <password>",
+            "Usage: bw-to-keepass.py <bitwarden.json> <output.kdbx> <password> [existing_kdbx_path]",
             file=sys.stderr,
         )
         sys.exit(1)
@@ -228,13 +270,17 @@ if __name__ == "__main__":
     json_path = sys.argv[1]
     kdbx_path = sys.argv[2]
     password = sys.argv[3]
+    existing_kdbx_path = sys.argv[4] if len(sys.argv) > 4 else None
 
     if not os.path.exists(json_path):
         print(f"Error: JSON file not found: {json_path}", file=sys.stderr)
         sys.exit(1)
 
     try:
-        convert_bitwarden_to_keepass(json_path, kdbx_path, password)
+        convert_bitwarden_to_keepass(json_path, kdbx_path, password, existing_kdbx_path)
+    except CredentialsError:
+        print("Error: Invalid password for existing KeePass database", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)

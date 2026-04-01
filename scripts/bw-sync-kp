@@ -57,33 +57,13 @@ echo ""
 read -s -p "Enter your KeePassXC Master Password: " KP_PASS
 echo ""
 
-# --- 3. Convert JSON to Temp KDBX ---
-echo "Step 2: Converting Bitwarden JSON to temporary KDBX..."
-$PYTHON_CMD "$SCRIPT_DIR/bw-to-keepass.py" "$BW_VAULT_JSON" "$TMP_KDBX" "$KP_PASS"
+# --- 3. Upsert into Synology Vault ---
+echo "Step 2: Upserting Bitwarden items into Synology Drive vault..."
+$PYTHON_CMD "$SCRIPT_DIR/bw-to-keepass.py" "$BW_VAULT_JSON" "$KP_DB_PATH" "$KP_PASS" "$KP_DB_PATH"
 
 if [ $? -ne 0 ]; then
-    echo "Error: Failed to convert Bitwarden export to KDBX format"
+    echo "Error: Failed to upsert into KeePass vault"
     exit 1
-fi
-
-# Verify temp database was created
-if [ ! -f "$TMP_KDBX" ]; then
-    echo "Error: Temporary database was not created"
-    exit 1
-fi
-
-echo "Created temporary database: $TMP_KDBX"
-
-# --- 4. Merge into Synology Vault ---
-echo "Step 3: Merging updates into Synology Drive..."
-if [ -f "$KP_DB_PATH" ]; then
-    # Merge if file exists
-    printf "%s\n%s\n" "$KP_PASS" "$KP_PASS" | keepassxc-cli merge "$KP_DB_PATH" "$TMP_KDBX"
-else
-    # If the file doesn't exist yet, move the temp one to the destination
-    echo "Target database not found. Creating new database at $KP_DB_PATH"
-    mkdir -p "$(dirname "$KP_DB_PATH")"
-    mv "$TMP_KDBX" "$KP_DB_PATH"
 fi
 
 echo "Sync complete!"

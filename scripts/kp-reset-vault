@@ -1,0 +1,53 @@
+#!/bin/bash
+# Reset the Synology KeePass vault to start fresh
+# Backs up the current vault and creates a new empty one
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+KP_DB_PATH="$HOME/SynologyDrive/documents/kp-db/passwords.kdbx"
+
+echo "=== KeePass Vault Reset ==="
+
+if [ ! -f "$KP_DB_PATH" ]; then
+    echo "Error: No vault found at $KP_DB_PATH"
+    exit 1
+fi
+
+echo ""
+read -s -p "Enter the current vault master password: " KP_PASS
+echo ""
+
+# Create a temp Python script to verify password and create new DB
+TMP_PY="$(mktemp /tmp/kp_reset.XXXXXX.py)"
+trap "rm -f $TMP_PY" EXIT
+
+cat > "$TMP_PY" << 'PYEOF'
+import sys
+import os
+from pykeepass import PyKeePass, create_database
+
+kdbx_path = sys.argv[1]
+password = sys.argv[2]
+
+try:
+    kp = PyKeePass(kdbx_path, password=password)
+    print("Password verified")
+except Exception as e:
+    print(f"Error: {e}", file=sys.stderr)
+    sys.exit(1)
+
+# Backup
+backup_path = f"{kdbx_path}.backup-{__import__('datetime').datetime.now().strftime('%Y%m%d-%H%M%S')}"
+import shutil
+shutil.copy(kdbx_path, backup_path)
+print(f"Backed up to: {backup_path}")
+
+# Create fresh DB
+create_database(kdbx_path, password=password)
+print(f"Created new vault at: {kdbx_path}")
+PYEOF
+
+python3 "$TMP_PY" "$KP_DB_PATH" "$KP_PASS"
+echo ""
+echo "Done! Run ./scripts/bw-sync-kp to populate the fresh vault."
