@@ -137,12 +137,12 @@ declare -A MODEL_ARGS=(
     -m $MODELS_DIR/qwen2.5-coder-7b-instruct-q4_k_m.gguf
     --chat-template chatml
     --jinja
-    --ctx-size 4096
+    --ctx-size 32768
     --batch-size 1024
     --ubatch-size 256
     --flash-attn on
-    --cache-type-k q8_0
-    --cache-type-v q8_0
+    --cache-type-k q4_0
+    --cache-type-v q4_0
     --fit on
     --fit-target 1536
     --n-gpu-layers auto
@@ -152,12 +152,12 @@ declare -A MODEL_ARGS=(
   [qwen3]="
     -m $MODELS_DIR/Qwen3-8B-Q4_K_M.gguf
     --jinja
-    --ctx-size 8192
+    --ctx-size 32768
     --batch-size 1024
     --ubatch-size 256
     --flash-attn on
-    --cache-type-k q8_0
-    --cache-type-v q8_0
+    --cache-type-k q4_0
+    --cache-type-v q4_0
     --n-gpu-layers auto
   "
 
@@ -165,12 +165,12 @@ declare -A MODEL_ARGS=(
   [qwen3_5]="
     -m $MODELS_DIR/Qwen_Qwen3.5-9B-Q4_K_M.gguf
     --jinja
-    --ctx-size 8192
+    --ctx-size 32768
     --batch-size 1024
     --ubatch-size 256
     --flash-attn on
-    --cache-type-k q8_0
-    --cache-type-v q8_0
+    --cache-type-k q4_0
+    --cache-type-v q4_0
     --n-gpu-layers auto
   "
 
@@ -180,13 +180,13 @@ declare -A MODEL_ARGS=(
   [nemotron-nano]="
     -m $MODELS_DIR/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf
     --jinja
-    --ctx-size 4096
+    --ctx-size 16384
     --parallel 2
     --batch-size 1024
     --ubatch-size 256
     --flash-attn on
-    --cache-type-k q8_0
-    --cache-type-v q8_0
+    --cache-type-k q4_0
+    --cache-type-v q4_0
     --cpu-moe
     --n-gpu-layers auto
   "
@@ -196,13 +196,13 @@ declare -A MODEL_ARGS=(
   # RAM while attention layers stay on GPU, optimal for 8GB VRAM.
   [gpt-oss]="
     --gpt-oss-20b-default
-    --ctx-size 4096
+    --ctx-size 16384
     --parallel 2
     --batch-size 1024
     --ubatch-size 256
     --flash-attn on
-    --cache-type-k q8_0
-    --cache-type-v q8_0
+    --cache-type-k q4_0
+    --cache-type-v q4_0
     --cpu-moe
     --n-gpu-layers auto
   "
