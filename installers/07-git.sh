@@ -31,8 +31,10 @@ git config --global mergetool.keepBackup "false"
 git config --global mergetool.prompt "false"
 
 # Diff com coloração
+git config --global diff.tool "nvim_difftool"
 git config --global diff.colorMoved "default"
 git config --global diff.renames "copies"
+git config --global difftool.nvim_difftool.cmd "nvim -c \"packadd nvim.difftool\" -c \"DiffTool \$LOCAL \$REMOTE\""
 
 # Rebase e Pull
 git config --global pull.rebase "true"
