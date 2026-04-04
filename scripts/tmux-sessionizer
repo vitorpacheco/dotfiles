@@ -33,7 +33,7 @@ sanity_check() {
 }
 
 switch_to() {
-    if [[ -z $TMUX ]]; then
+    if [[ -z ${TMUX:-} ]]; then
         tmux attach-session -t "$1"
     else
         tmux switch-client -t "$1"
@@ -41,18 +41,157 @@ switch_to() {
 }
 
 has_session() {
-    tmux list-sessions | grep -q "^$1:"
+    tmux list-sessions 2>/dev/null | grep -q "^$1:"
+}
+
+has_window() {
+    tmux list-windows -t "$1" -F '#W' 2>/dev/null | grep -Fxq "$2"
 }
 
 hydrate() {
-    if [ -f "$2/.tmux-sessionizer" ]; then
+    if [[ -f "$2/.tmux-sessionizer" ]]; then
         tmux send-keys -t "$1" "source $2/.tmux-sessionizer" c-M
-    elif [ -f "$HOME/.tmux-sessionizer" ]; then
+    elif [[ -f "$HOME/.tmux-sessionizer" ]]; then
         tmux send-keys -t "$1" "source $HOME/.tmux-sessionizer" c-M
     fi
 }
 
-sanity_check
+ensure_session_for_path() {
+    local selected="$1"
+    local selected_name
+    local tmux_running
+
+    selected_name=$(basename "$selected" | tr . _)
+    tmux_running=$(pgrep tmux || true)
+
+    if [[ -z ${TMUX:-} ]] && [[ -z $tmux_running ]]; then
+        tmux new-session -ds "$selected_name" -c "$selected"
+        hydrate "$selected_name" "$selected"
+    fi
+
+    if ! has_session "$selected_name"; then
+        tmux new-session -ds "$selected_name" -c "$selected"
+        hydrate "$selected_name" "$selected"
+    fi
+
+    echo "$selected_name"
+}
+
+get_session_dir() {
+    local session_name="$1"
+    local session_dir
+
+    session_dir=$(tmux display-message -p -t "$session_name" '#{session_path}' 2>/dev/null || true)
+    if [[ -z "$session_dir" ]]; then
+        session_dir=$(tmux list-panes -t "$session_name" -F '#{pane_current_path}' 2>/dev/null | head -1)
+    fi
+
+    echo "$session_dir"
+}
+
+clone_and_start_session() {
+    local repo_url="$1"
+    local base_dir="${2:-$PWD}"
+    local repo_name
+    local target_dir
+    local session_name
+
+    if ! command -v git &>/dev/null; then
+        echo "git is not installed. Please install it first."
+        exit 1
+    fi
+
+    repo_name=$(basename "$repo_url")
+    repo_name="${repo_name%.git}"
+    target_dir="$base_dir/$repo_name"
+
+    mkdir -p "$base_dir"
+
+    if [[ ! -d "$target_dir/.git" ]]; then
+        git clone "$repo_url" "$target_dir"
+    else
+        echo "Repository already exists at: $target_dir"
+    fi
+
+    session_name=$(ensure_session_for_path "$target_dir")
+    switch_to "$session_name"
+}
+
+start_dev_environment() {
+    local target="${1:-}"
+    local session_name
+    local session_dir
+    local current_session=""
+    local current_window_id=""
+    local use_current_window=false
+    local ai_window_target=""
+
+    if [[ -n ${TMUX:-} ]]; then
+        current_session=$(tmux display-message -p '#S')
+        current_window_id=$(tmux display-message -p '#{window_id}')
+    fi
+
+    if [[ -n "$target" ]] && [[ -d "$target" ]]; then
+        session_name=$(ensure_session_for_path "$target")
+        session_dir="$target"
+    elif [[ -n "$target" ]]; then
+        if ! has_session "$target"; then
+            echo "Session not found: $target"
+            exit 1
+        fi
+        session_name="$target"
+        session_dir=$(get_session_dir "$session_name")
+    elif [[ -n ${TMUX:-} ]]; then
+        session_name="$current_session"
+        session_dir=$(get_session_dir "$session_name")
+    else
+        local selected
+        selected=$(find_dirs | fzf)
+        if [[ -z "$selected" ]]; then
+            exit 0
+        fi
+
+        if [[ "$selected" =~ ^\[TMUX\]\ (.+)$ ]]; then
+            session_name="${BASH_REMATCH[1]}"
+            session_dir=$(get_session_dir "$session_name")
+        else
+            session_name=$(ensure_session_for_path "$selected")
+            session_dir="$selected"
+        fi
+    fi
+
+    if [[ -z "$session_dir" ]]; then
+        echo "Could not determine session directory for: $session_name"
+        exit 1
+    fi
+
+    if [[ -n ${TMUX:-} ]] && [[ "$session_name" == "$current_session" ]]; then
+        use_current_window=true
+    fi
+
+    if [[ "$use_current_window" == true ]]; then
+        ai_window_target="$current_window_id"
+        tmux send-keys -t "$ai_window_target" C-c
+        tmux send-keys -t "$ai_window_target" "tdl c" C-m
+    else
+        ai_window_target="$session_name:ai"
+        if ! has_window "$session_name" "ai"; then
+            tmux new-window -d -t "$session_name:" -n "ai" -c "$session_dir"
+            tmux send-keys -t "$ai_window_target" "tdl c" C-m
+        fi
+    fi
+
+    if ! has_window "$session_name" "lazygit"; then
+        tmux new-window -d -t "$session_name:" -n "lazygit" -c "$session_dir" "lazygit"
+    fi
+
+    if ! has_window "$session_name" "server"; then
+        tmux new-window -d -t "$session_name:" -n "server" -c "$session_dir"
+    fi
+
+    switch_to "$session_name"
+    tmux select-window -t "$ai_window_target"
+}
 
 # if TS_SEARCH_PATHS is not set use default
 [[ -n "$TS_SEARCH_PATHS" ]] || TS_SEARCH_PATHS=(~/ ~/personal ~/personal/dev/env/.config)
@@ -68,7 +207,7 @@ fi
 # utility function to find directories
 find_dirs() {
     # list TMUX sessions
-    if [[ -n "${TMUX}" ]]; then
+    if [[ -n "${TMUX:-}" ]]; then
         current_session=$(tmux display-message -p '#S')
         tmux list-sessions -F "[TMUX] #{session_name}" 2>/dev/null | grep -vFx "[TMUX] $current_session"
     else
@@ -85,11 +224,29 @@ find_dirs() {
             depth="${BASH_REMATCH[2]}"
         else
             path="$entry"
+            depth="${TS_MAX_DEPTH:-1}"
         fi
 
-        [[ -d "$path" ]] && find "$path" -mindepth 1 -maxdepth "${depth:-${TS_MAX_DEPTH:-1}}" -path '*/.git' -prune -o -type d -print
+        [[ -d "$path" ]] && find "$path" -mindepth 1 -maxdepth "$depth" -path '*/.git' -prune -o -type d -print
     done
 }
+
+sanity_check
+
+case "${1:-}" in
+clone)
+    if [[ -z "${2:-}" ]]; then
+        echo "Usage: tmux-sessionizer clone <git_repo_url> [destination_dir]"
+        exit 1
+    fi
+    clone_and_start_session "$2" "${3:-}"
+    exit 0
+    ;;
+dev)
+    start_dev_environment "${2:-}"
+    exit 0
+    ;;
+esac
 
 if [[ $# -eq 1 ]]; then
     selected="$1"
@@ -102,21 +259,9 @@ if [[ -z $selected ]]; then
 fi
 
 if [[ "$selected" =~ ^\[TMUX\]\ (.+)$ ]]; then
-    selected="${BASH_REMATCH[1]}"
+    switch_to "${BASH_REMATCH[1]}"
+    exit 0
 fi
 
-selected_name=$(basename "$selected" | tr . _)
-tmux_running=$(pgrep tmux)
-
-if [[ -z $TMUX ]] && [[ -z $tmux_running ]]; then
-    tmux new-session -ds "$selected_name" -c "$selected"
-    hydrate "$selected_name" "$selected"
-fi
-
-if ! has_session "$selected_name"; then
-    tmux new-session -ds "$selected_name" -c "$selected"
-    hydrate "$selected_name" "$selected"
-fi
-
-switch_to "$selected_name"
-
+session_name=$(ensure_session_for_path "$selected")
+switch_to "$session_name"

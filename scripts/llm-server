@@ -35,7 +35,7 @@
 #   LLAMA_THREADS=8         inference threads (physical core count)
 #   LLAMA_THREADS_BATCH=12  batch processing threads
 #   LLAMA_THREADS_HTTP=4    HTTP handler threads
-#   LLAMA_PARALLEL=8        concurrent inference slots
+#   LLAMA_PARALLEL=2        concurrent inference slots (recommended for 8GB VRAM)
 #   LLAMA_DIR               path to the llama.cpp checkout
 #   LLAMA_SERVER            override the llama-server binary path
 #
@@ -77,9 +77,19 @@ DEFAULT_THREADS="8"
 DEFAULT_THREADS_BATCH="12"
 DEFAULT_THREADS_HTTP="4"
 DEFAULT_PARALLEL="8"
+DEFAULT_CTX_SIZE_LARGE="65536"
+DEFAULT_CTX_SIZE_SMALL="16384"
 DEFAULT_BENCH_REQUESTS="10"
 DEFAULT_BENCH_N_PREDICT="256"
 DEFAULT_API_KEY=""
+
+# Host-specific defaults
+HOSTNAME_SHORT="$(hostname -s 2>/dev/null || hostname)"
+if [[ "$HOSTNAME_SHORT" == "donan" ]]; then
+  # Ryzen 7 5700X + RTX 3070 Ti (8GB VRAM) tuned defaults
+  DEFAULT_PARALLEL="2"
+  DEFAULT_CTX_SIZE_LARGE="32768"
+fi
 
 # Load configuration from shell-compatible .conf file
 # Config file uses simple KEY=VALUE format with variable expansion
@@ -91,29 +101,41 @@ load_config() {
   # Source the config file to load variables
   # This allows shell variable expansion like $HOME
   set -a
-  source "$CONFIG_FILE" 2>/dev/null || true
+  if ! source "$CONFIG_FILE"; then
+    echo "Error: failed to load config file: $CONFIG_FILE" >&2
+    exit 1
+  fi
   set +a
 }
 
 # Initialize config values (call this after defining the function)
+# Keep originals to avoid zsh's built-in HOST leaking into SERVER_HOST defaults.
+ORIGINAL_HOST_VAR="${HOST:-}"
+ORIGINAL_PORT_VAR="${PORT:-}"
 load_config
 
 # Use config values if available, otherwise use defaults
 # Environment variables override config values
 LLAMA_DIR="${LLAMA_DIR:-${LLAMA_CPP:-$DEFAULT_LLAMA_DIR}}"
 MODELS_DIR="${MODELS_DIR:-${MODELS:-$DEFAULT_MODELS_DIR}}"
-SERVER_HOST="${SERVER_HOST:-${HOST:-$DEFAULT_HOST}}"
-SERVER_PORT="${SERVER_PORT:-${PORT:-$DEFAULT_PORT}}"
+CONFIG_HOST=""
+CONFIG_PORT=""
+[[ "${HOST:-}" != "$ORIGINAL_HOST_VAR" ]] && CONFIG_HOST="$HOST"
+[[ "${PORT:-}" != "$ORIGINAL_PORT_VAR" ]] && CONFIG_PORT="$PORT"
+SERVER_HOST="${SERVER_HOST:-${LLAMA_HOST:-${CONFIG_HOST:-$DEFAULT_HOST}}}"
+SERVER_PORT="${SERVER_PORT:-${LLAMA_PORT:-${CONFIG_PORT:-$DEFAULT_PORT}}}"
 LLAMA_THREADS="${LLAMA_THREADS:-${THREADS:-$DEFAULT_THREADS}}"
 LLAMA_THREADS_BATCH="${LLAMA_THREADS_BATCH:-${THREADS_BATCH:-$DEFAULT_THREADS_BATCH}}"
 LLAMA_THREADS_HTTP="${LLAMA_THREADS_HTTP:-${THREADS_HTTP:-$DEFAULT_THREADS_HTTP}}"
 LLAMA_PARALLEL="${LLAMA_PARALLEL:-${PARALLEL:-$DEFAULT_PARALLEL}}"
+LLAMA_CTX_SIZE_LARGE="${LLAMA_CTX_SIZE_LARGE:-${CTX_SIZE_LARGE:-$DEFAULT_CTX_SIZE_LARGE}}"
+LLAMA_CTX_SIZE_SMALL="${LLAMA_CTX_SIZE_SMALL:-${CTX_SIZE_SMALL:-$DEFAULT_CTX_SIZE_SMALL}}"
 BENCH_REQUESTS="${BENCH_REQUESTS:-${BENCH_REQUESTS_CONF:-$DEFAULT_BENCH_REQUESTS}}"
 BENCH_N_PREDICT="${BENCH_N_PREDICT:-${BENCH_N_PREDICT_CONF:-$DEFAULT_BENCH_N_PREDICT}}"
 LLAMA_API_KEY="${LLAMA_API_KEY:-${API_KEY:-$DEFAULT_API_KEY}}"
 
-# Skip binary detection for setup (binary may not exist yet)
-if [[ "${1:-}" != "setup" ]]; then
+# Skip binary detection for setup/profile (binary may not exist yet)
+if [[ "${1:-}" != "setup" && "${1:-}" != "profile" ]]; then
   if [[ -n "${LLAMA_SERVER:-}" ]]; then
     : # use env override as-is
   elif command -v llama-server &>/dev/null; then
@@ -137,8 +159,7 @@ declare -A MODEL_ARGS=(
   [qwen2_5-coder]="
     -m $MODELS_DIR/qwen2.5-coder-7b-instruct-q4_k_m.gguf
     --chat-template chatml
-    --ctx-size 65536
-    --parallel 4
+    --ctx-size $LLAMA_CTX_SIZE_LARGE
     --batch-size 1024
     --ubatch-size 256
     --flash-attn on
@@ -155,8 +176,7 @@ declare -A MODEL_ARGS=(
   [qwen3]="
     -m $MODELS_DIR/Qwen3-8B-Q4_K_M.gguf
     --jinja
-    --ctx-size 65536
-    --parallel 4
+    --ctx-size $LLAMA_CTX_SIZE_LARGE
     --reasoning off
     --batch-size 1024
     --ubatch-size 256
@@ -170,14 +190,12 @@ declare -A MODEL_ARGS=(
   "
 
   # Qwen3.5 9B GGUF local (hybrid DeltaNet arch — GPU support pending in llama.cpp)
-  # Reduced to 4 parallel slots for higher per-slot context (16k tokens)
   # Non-thinking mode default: temp=0.7, top_p=0.8 (Qwen3.5 general tasks)
   # Use --reasoning flag for thinking mode
   [qwen3_5]="
     -m $MODELS_DIR/Qwen_Qwen3.5-9B-Q4_K_M.gguf
     --jinja
-    --ctx-size 65536
-    --parallel 4
+    --ctx-size $LLAMA_CTX_SIZE_LARGE
     --reasoning off
     --batch-size 1024
     --ubatch-size 256
@@ -196,8 +214,7 @@ declare -A MODEL_ARGS=(
   [qwen3_coder_next]="
     -m $MODELS_DIR/Qwen3-Coder-Next-UD-Q4_K_XL.gguf
     --jinja
-    --ctx-size 65536
-    --parallel 2
+    --ctx-size $LLAMA_CTX_SIZE_LARGE
     --reasoning off
     --batch-size 1024
     --ubatch-size 256
@@ -221,8 +238,7 @@ declare -A MODEL_ARGS=(
   [glm_4_7_flash]="
     -m $MODELS_DIR/GLM-4.7-Flash-UD-Q4_K_XL.gguf
     --jinja
-    --ctx-size 65536
-    --parallel 2
+    --ctx-size $LLAMA_CTX_SIZE_LARGE
     --reasoning off
     --batch-size 1024
     --ubatch-size 256
@@ -242,8 +258,7 @@ declare -A MODEL_ARGS=(
   [nemotron-nano]="
     -m $MODELS_DIR/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf
     --jinja
-    --ctx-size 16384
-    --parallel 2
+    --ctx-size $LLAMA_CTX_SIZE_SMALL
     --reasoning off
     --batch-size 1024
     --ubatch-size 256
@@ -256,14 +271,30 @@ declare -A MODEL_ARGS=(
     --n-gpu-layers auto
   "
 
+  # Gemma 4 E4B (IQ4_NL)
+  # Good fit for donan (8GB VRAM) with mixed CPU/GPU inference.
+  [gemma4_e4b]="
+    -m $MODELS_DIR/gemma-4-E4B-it-IQ4_NL.gguf
+    --jinja
+    --ctx-size $LLAMA_CTX_SIZE_SMALL
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn on
+    --cache-type-k q4_0
+    --cache-type-v q4_0
+    --temperature 0.7
+    --top-p 0.9
+    --min-p 0.0
+    --n-gpu-layers auto
+  "
+
   # GPT-OSS 20B preset (downloads weights automatically)
   # MoE: 20.9B total / 3.6B active params. --cpu-moe keeps expert weights in
   # RAM while attention layers stay on GPU, optimal for 8GB VRAM.
   # Default: temp=0.7, top_p=0.9 (Llama 3-like settings for GPT-OSS)
   [gpt-oss]="
     --gpt-oss-20b-default
-    --ctx-size 16384
-    --parallel 2
+    --ctx-size $LLAMA_CTX_SIZE_SMALL
     --reasoning off
     --batch-size 1024
     --ubatch-size 256
@@ -283,6 +314,7 @@ declare -A MODEL_PORT=(
   [qwen3]=8084
   [qwen3_5]=8084
   [gpt-oss]=8084
+  [gemma4_e4b]=8084
   [nemotron-nano]=8084
   [qwen3_coder_next]=8084
   [glm_4_7_flash]=8084
@@ -297,6 +329,7 @@ declare -A MODEL_HF=(
   [nemotron-nano]="bartowski/nvidia_Nemotron-3-Nano-30B-A3B-GGUF nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
   [qwen3_coder_next]="unsloth/Qwen3-Coder-Next-GGUF Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
   [glm_4_7_flash]="unsloth/GLM-4.7-Flash-GGUF GLM-4.7-Flash-UD-Q4_K_XL.gguf"
+  [gemma4_e4b]="unsloth/gemma-4-E4B-it-GGUF gemma-4-E4B-it-IQ4_NL.gguf"
 )
 
 # Models that support reasoning/thinking mode (--reasoning-budget)
@@ -310,6 +343,7 @@ declare -A MODEL_PATH=(
   [nemotron-nano]="$MODELS_DIR/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
   [qwen3_coder_next]="$MODELS_DIR/Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
   [glm_4_7_flash]="$MODELS_DIR/GLM-4.7-Flash-UD-Q4_K_XL.gguf"
+  [gemma4_e4b]="$MODELS_DIR/gemma-4-E4B-it-IQ4_NL.gguf"
 )
 
 # Draft models for speculative decoding (must share tokenizer with the target)
@@ -526,6 +560,11 @@ benchmark_model() {
 
   if [[ -z "${MODEL_ARGS[$model]+x}" ]]; then
     echo "Invalid model: $model"; usage; exit 1
+  fi
+
+  if ! command -v python3 &>/dev/null; then
+    echo "Error: python3 is required for benchmark mode"
+    exit 1
   fi
 
   ensure_model "$model"
@@ -752,7 +791,7 @@ THREADS_BATCH=12
 THREADS_HTTP=4
 
 # Number of parallel inference slots
-PARALLEL=8
+PARALLEL=2
 
 # ============================================================================
 # Benchmark Settings
@@ -777,6 +816,56 @@ EOF
 }
 
 # =============================================================================
+# Profile / diagnostics
+# =============================================================================
+
+show_profile() {
+  local model="${1:-}"
+
+  if [[ -n "$model" ]] && [[ -z "${MODEL_PORT[$model]+x}" ]]; then
+    echo "Invalid model for profile: $model"
+    echo "Tip: run 'llm-server --help' for valid model names"
+    exit 1
+  fi
+
+  echo "llm-server profile"
+  echo "  Hostname:           $HOSTNAME_SHORT"
+  if [[ "$HOSTNAME_SHORT" == "donan" ]]; then
+    echo "  Preset:             donan (Ryzen 7 5700X + RTX 3070 Ti)"
+  else
+    echo "  Preset:             generic"
+  fi
+  echo ""
+  echo "Paths"
+  echo "  LLAMA_DIR:          $LLAMA_DIR"
+  echo "  MODELS_DIR:         $MODELS_DIR"
+  echo "  CONFIG_FILE:        $CONFIG_FILE"
+  echo ""
+  echo "Server defaults"
+  echo "  HOST:               $SERVER_HOST"
+  echo "  PORT (base):        $SERVER_PORT"
+  echo ""
+  echo "Runtime defaults"
+  echo "  LLAMA_THREADS:      $LLAMA_THREADS"
+  echo "  LLAMA_THREADS_BATCH: $LLAMA_THREADS_BATCH"
+  echo "  LLAMA_THREADS_HTTP: $LLAMA_THREADS_HTTP"
+  echo "  LLAMA_PARALLEL:     $LLAMA_PARALLEL"
+  echo "  CTX_SIZE_LARGE:     $LLAMA_CTX_SIZE_LARGE"
+  echo "  CTX_SIZE_SMALL:     $LLAMA_CTX_SIZE_SMALL"
+  echo ""
+
+  if [[ -n "$model" ]]; then
+    local model_port="${MODEL_PORT[$model]}"
+    local effective_port="$SERVER_PORT"
+    [[ -z "$effective_port" ]] && effective_port="$model_port"
+    echo "Model-specific"
+    echo "  MODEL:              $model"
+    echo "  MODEL_PORT:         $model_port"
+    echo "  EFFECTIVE_PORT:     $effective_port"
+  fi
+}
+
+# =============================================================================
 # Usage
 # =============================================================================
 
@@ -784,13 +873,15 @@ usage() {
   cat <<EOF
 Usage:
   llm-server setup
+  llm-server profile [model]
   llm-server benchmark <model>
   llm-server <model> [flags] [-- extra llama-server args...]
 
-Models: qwen2_5-coder | qwen3 | qwen3_5 | gpt-oss | nemotron-nano | qwen3_coder_next | glm_4_7_flash
+Models: qwen2_5-coder | qwen3 | qwen3_5 | gpt-oss | nemotron-nano | qwen3_coder_next | glm_4_7_flash | gemma4_e4b
 
 Commands:
   setup               clone/update llama.cpp and build with CUDA (RTX 3070 Ti + 5700X)
+  profile [model]     print active runtime profile/settings (optionally for model)
   benchmark <model>   measure throughput with and without speculative decoding
 
 Flags:
@@ -810,12 +901,14 @@ Configuration:
 
 Env overrides (5700X defaults):
   LLAMA_THREADS=8       LLAMA_THREADS_BATCH=12
-  LLAMA_THREADS_HTTP=4  LLAMA_PARALLEL=8
+  LLAMA_THREADS_HTTP=4  LLAMA_PARALLEL=2
   LLAMA_DIR=$HOME/applications/llama.cpp
   BENCH_REQUESTS=10     BENCH_N_PREDICT=256
 
 Examples:
   llm-server setup
+  llm-server profile
+  llm-server profile qwen3
   llm-server benchmark qwen3
   llm-server qwen3
   llm-server qwen3 --draft
@@ -823,6 +916,7 @@ Examples:
   llm-server qwen3 --update
   llm-server qwen2_5-coder --port 9000
   llm-server qwen3_coder_next
+  llm-server gemma4_e4b
   llm-server glm_4_7_flash --reasoning
   llm-server qwen3 -- --log-verbosity 4
 EOF
@@ -840,6 +934,11 @@ if [[ "$1" == "setup" ]]; then
   setup_llama; exit 0
 fi
 
+if [[ "$1" == "profile" ]]; then
+  show_profile "${2:-}"
+  exit 0
+fi
+
 if [[ "$1" == "benchmark" ]]; then
   [[ $# -lt 2 ]] && { echo "Usage: llm-server benchmark <model>"; exit 1; }
   benchmark_model "$2"; exit 0
@@ -851,8 +950,8 @@ if [[ -z "${MODEL_ARGS[$MODEL]+x}" ]]; then
   echo "Invalid model: $MODEL"; usage; exit 1
 fi
 
-HOST="0.0.0.0"
-PORT="${MODEL_PORT[$MODEL]}"
+HOST="$SERVER_HOST"
+PORT="${SERVER_PORT:-${MODEL_PORT[$MODEL]}}"
 REASONING=0
 DRAFT=0
 UPDATE=0
@@ -861,9 +960,21 @@ UPDATE=0
 PASSTHRU=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
-  --host)         HOST="$2";           shift 2 ;;
-  --port)         PORT="$2";           shift 2 ;;
-  --api-key)      LLAMA_API_KEY="$2";  shift 2 ;;
+  --host)
+    [[ $# -lt 2 ]] && { echo "Error: --host requires a value"; exit 1; }
+    HOST="$2"
+    shift 2
+    ;;
+  --port)
+    [[ $# -lt 2 ]] && { echo "Error: --port requires a value"; exit 1; }
+    PORT="$2"
+    shift 2
+    ;;
+  --api-key)
+    [[ $# -lt 2 ]] && { echo "Error: --api-key requires a value"; exit 1; }
+    LLAMA_API_KEY="$2"
+    shift 2
+    ;;
   --reasoning)    REASONING=1;  shift   ;;
   --no-reasoning) REASONING=0;  shift   ;;
   --draft)        DRAFT=1;      shift   ;;
