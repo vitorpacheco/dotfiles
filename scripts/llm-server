@@ -288,6 +288,23 @@ declare -A MODEL_ARGS=(
     --n-gpu-layers auto
   "
 
+  # Gemma 4 E4B multimodal preset.
+  # Requires an mmproj file (downloaded automatically when configured below).
+  [gemma4_e4b_vision]="
+    -m $MODELS_DIR/gemma-4-E4B-it-IQ4_NL.gguf
+    --jinja
+    --ctx-size $LLAMA_CTX_SIZE_SMALL
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn on
+    --cache-type-k q4_0
+    --cache-type-v q4_0
+    --temperature 0.7
+    --top-p 0.9
+    --min-p 0.0
+    --n-gpu-layers auto
+  "
+
   # GPT-OSS 20B preset (downloads weights automatically)
   # MoE: 20.9B total / 3.6B active params. --cpu-moe keeps expert weights in
   # RAM while attention layers stay on GPU, optimal for 8GB VRAM.
@@ -315,6 +332,7 @@ declare -A MODEL_PORT=(
   [qwen3_5]=8084
   [gpt-oss]=8084
   [gemma4_e4b]=8084
+  [gemma4_e4b_vision]=8084
   [nemotron-nano]=8084
   [qwen3_coder_next]=8084
   [glm_4_7_flash]=8084
@@ -330,6 +348,7 @@ declare -A MODEL_HF=(
   [qwen3_coder_next]="unsloth/Qwen3-Coder-Next-GGUF Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
   [glm_4_7_flash]="unsloth/GLM-4.7-Flash-GGUF GLM-4.7-Flash-UD-Q4_K_XL.gguf"
   [gemma4_e4b]="unsloth/gemma-4-E4B-it-GGUF gemma-4-E4B-it-IQ4_NL.gguf"
+  [gemma4_e4b_vision]="unsloth/gemma-4-E4B-it-GGUF gemma-4-E4B-it-IQ4_NL.gguf"
 )
 
 # Models that support reasoning/thinking mode (--reasoning-budget)
@@ -344,6 +363,7 @@ declare -A MODEL_PATH=(
   [qwen3_coder_next]="$MODELS_DIR/Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
   [glm_4_7_flash]="$MODELS_DIR/GLM-4.7-Flash-UD-Q4_K_XL.gguf"
   [gemma4_e4b]="$MODELS_DIR/gemma-4-E4B-it-IQ4_NL.gguf"
+  [gemma4_e4b_vision]="$MODELS_DIR/gemma-4-E4B-it-IQ4_NL.gguf"
 )
 
 # Draft models for speculative decoding (must share tokenizer with the target)
@@ -356,6 +376,16 @@ declare -A MODEL_DRAFT_HF=(
 declare -A MODEL_DRAFT_PATH=(
   [qwen2_5-coder]="$MODELS_DIR/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf"
   [qwen3]="$MODELS_DIR/Qwen3-0.6B-Q8_0.gguf"
+)
+
+# Vision projector files for multimodal models
+# Format: "owner/repo filename" on HuggingFace
+declare -A MODEL_MM_PROJ_HF=(
+  [gemma4_e4b_vision]="unsloth/gemma-4-E4B-it-GGUF mmproj-F16.gguf"
+)
+
+declare -A MODEL_MM_PROJ_PATH=(
+  [gemma4_e4b_vision]="$MODELS_DIR/mmproj-F16.gguf"
 )
 
 # =============================================================================
@@ -445,6 +475,30 @@ ensure_draft_model() {
   local sha
   sha=$(hf_lfs_sha256 "$repo" "$file")
   [[ -n "$sha" ]] && echo "$sha" > "${draft_path}.sha256"
+}
+
+ensure_mmproj() {
+  local model="$1"
+  [[ -z "${MODEL_MM_PROJ_PATH[$model]+x}" ]] && return 0
+
+  local mmproj_path="${MODEL_MM_PROJ_PATH[$model]}"
+  [[ -f "$mmproj_path" ]] && return 0
+
+  if [[ -z "${MODEL_MM_PROJ_HF[$model]+x}" ]]; then
+    echo "Error: mmproj file not found: $mmproj_path"
+    echo "Hint: set MODEL_MM_PROJ_HF for $model or place the file manually"
+    exit 1
+  fi
+
+  local repo file
+  read -r repo file <<< "${MODEL_MM_PROJ_HF[$model]}"
+  echo "Vision projector not found. Downloading $file from $repo..."
+  mkdir -p "$(dirname "$mmproj_path")"
+  download_model_file "$repo" "$file" "$mmproj_path"
+
+  local sha
+  sha=$(hf_lfs_sha256 "$repo" "$file")
+  [[ -n "$sha" ]] && echo "$sha" > "${mmproj_path}.sha256"
 }
 
 update_model() {
@@ -568,10 +622,16 @@ benchmark_model() {
   fi
 
   ensure_model "$model"
+  ensure_mmproj "$model"
 
   # Always disable reasoning for consistent benchmark results
   # Omit --reasoning-budget entirely to truly disable reasoning mode
   local reasoning_args=()
+
+  local mmproj_args=()
+  if [[ -n "${MODEL_MM_PROJ_PATH[$model]+x}" ]]; then
+    mmproj_args=(--mmproj "${MODEL_MM_PROJ_PATH[$model]}")
+  fi
 
   local has_draft=0
   [[ -n "${MODEL_DRAFT_PATH[$model]+x}" ]] && has_draft=1
@@ -591,6 +651,7 @@ benchmark_model() {
     --threads-http "$LLAMA_THREADS_HTTP" --parallel 1 \
     --log-disable \
     ${=MODEL_ARGS[$model]} \
+    "${mmproj_args[@]}" \
     --host 127.0.0.1 --port "$port" \
     "${reasoning_args[@]}" > /dev/null 2>&1 &
   server_pid=$!
@@ -619,6 +680,7 @@ benchmark_model() {
       --log-disable \
       --model-draft "$draft_path" \
       ${=MODEL_ARGS[$model]} \
+      "${mmproj_args[@]}" \
       "${reasoning_args[@]}" > /dev/null 2>&1 &
     server_pid=$!
 
@@ -877,7 +939,7 @@ Usage:
   llm-server benchmark <model>
   llm-server <model> [flags] [-- extra llama-server args...]
 
-Models: qwen2_5-coder | qwen3 | qwen3_5 | gpt-oss | nemotron-nano | qwen3_coder_next | glm_4_7_flash | gemma4_e4b
+Models: qwen2_5-coder | qwen3 | qwen3_5 | gpt-oss | nemotron-nano | qwen3_coder_next | glm_4_7_flash | gemma4_e4b | gemma4_e4b_vision
 
 Commands:
   setup               clone/update llama.cpp and build with CUDA (RTX 3070 Ti + 5700X)
@@ -917,6 +979,7 @@ Examples:
   llm-server qwen2_5-coder --port 9000
   llm-server qwen3_coder_next
   llm-server gemma4_e4b
+  llm-server gemma4_e4b_vision
   llm-server glm_4_7_flash --reasoning
   llm-server qwen3 -- --log-verbosity 4
 EOF
@@ -990,6 +1053,7 @@ if [[ $UPDATE -eq 1 ]]; then
   update_model "$MODEL"
 fi
 ensure_model "$MODEL"
+ensure_mmproj "$MODEL"
 
 # Reasoning budget (default: disabled unless --reasoning is explicitly passed)
 REASONING_ARGS=()
@@ -1015,6 +1079,12 @@ if [[ $DRAFT -eq 1 ]]; then
   else
     echo "Warning: no draft model configured for $MODEL, ignoring --draft"
   fi
+fi
+
+# Vision projector
+MM_PROJ_ARGS=()
+if [[ -n "${MODEL_MM_PROJ_PATH[$MODEL]+x}" ]]; then
+  MM_PROJ_ARGS=(--mmproj "${MODEL_MM_PROJ_PATH[$MODEL]}")
 fi
 
 # Check for existing process on the port
@@ -1045,6 +1115,7 @@ exec "$LLAMA_SERVER" \
   ${=MODEL_ARGS[$MODEL]} \
   "${REASONING_ARGS[@]}" \
   "${DRAFT_ARGS[@]}" \
+  "${MM_PROJ_ARGS[@]}" \
   "${API_KEY_ARGS[@]}" \
   --host "$HOST" \
   --port "$PORT" \
