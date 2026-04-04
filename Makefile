@@ -127,7 +127,7 @@ clean:
 validate:
 	@echo "$(BLUE)[INFO]$(NC) Validating script syntax..."
 	@bash -n ./install && echo "$(GREEN)✓$(NC) ./install" || echo "$(RED)✗$(NC) ./install"
-	@for script in packages/*.sh installers/*.sh apps/*.sh utils/*.sh; do \
+	@for script in lib/*.sh packages/*.sh installers/*.sh apps/*.sh utils/*.sh gnome/*.sh; do \
 		bash -n "$$script" && echo "$(GREEN)✓$(NC) $$script" || echo "$(RED)✗$(NC) $$script"; \
 	done
 	@echo "$(GREEN)[SUCCESS]$(NC) Syntax validation complete"

@@ -120,18 +120,17 @@ update_checksums() {
 	mkdir -p "$CONFIG_DIR"
 	>"$CHECKSUM_FILE"
 
-	# Calculate checksums for all config files
-	for file in "$DOTFILES_DIR/config-files"/*; do
-		if [[ -f "$file" ]]; then
-			local checksum
-			if command -v md5sum >/dev/null 2>&1; then
-				checksum=$(md5sum "$file" | cut -d' ' -f1)
-			elif command -v md5 >/dev/null 2>&1; then
-				checksum=$(md5 -q "$file")
-			fi
-			echo "$checksum $CONFIG_DIR/$(basename "$file")" >>"$CHECKSUM_FILE"
+	# Calculate checksums for all config files (recursive)
+	while IFS= read -r -d '' file; do
+		local checksum
+		if command -v md5sum >/dev/null 2>&1; then
+			checksum=$(md5sum "$file" | cut -d' ' -f1)
+		elif command -v md5 >/dev/null 2>&1; then
+			checksum=$(md5 -q "$file")
 		fi
-	done
+		local rel_path="${file#$DOTFILES_DIR/config-files/}"
+		echo "$checksum $CONFIG_DIR/$rel_path" >>"$CHECKSUM_FILE"
+	done < <(find "$DOTFILES_DIR/config-files" -type f -print0)
 
 	log_debug "Checksums saved to $CHECKSUM_FILE"
 }

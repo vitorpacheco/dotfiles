@@ -5,4 +5,7 @@
 **/Code/SharedStorage-wal
 **/Code/code.lock
 *.pyc
+.idea/
+.opencode/
+config-files/nvim/undodir/
 

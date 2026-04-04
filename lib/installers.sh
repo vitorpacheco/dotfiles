@@ -32,7 +32,7 @@ install_config_files() {
 	mkdir -p "$CONFIG_DIR"
 
 	# Configs to skip when running on Omarchy (to preserve Omarchy's system configs)
-	local omarchy_excluded_configs=("btop" "kitty" "ghostty")
+	local omarchy_excluded_configs=("btop" "kitty" "ghostty" "hypr" "tmux")
 
 	for file in "$DOTFILES_DIR/config-files"/*; do
 		if [[ -e "$file" ]]; then

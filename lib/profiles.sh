@@ -215,8 +215,10 @@ run_installation() {
 
 	execute_utils "$UTILITY_SCRIPTS"
 
-	# Install Hyprland plugins if on Hyprland
-	install_hyprland_plugins
+	# Install Hyprland plugins if on Hyprland and overrides were requested
+	if [[ "$INSTALL_OMARCHY_OVERRIDES" == true ]] || [[ "$INSTALL_KOOL_OVERRIDES" == true ]]; then
+		install_hyprland_plugins
+	fi
 
 	# Update checksums after installation
 	if [[ "$DRY_RUN" == false ]] && [[ "$INSTALL_CONFIG" == true ]]; then
