@@ -238,6 +238,21 @@ if-shell "[ -f ~/.config/tmux/omarchy-overrides.conf ]" "source-file ~/.config/t
 			create_symlink "$hypr_override_source" "$hypr_override_dest"
 		fi
 
+		# Install machine-specific hyprland config based on hostname
+		local hypr_machine_source="$DOTFILES_DIR/config-files/hypr/machines/$(hostname).conf"
+		local hypr_machine_dest="$CONFIG_DIR/hypr/machine.conf"
+
+		if [[ -f "$hypr_machine_source" ]]; then
+			if [[ "$DRY_RUN" == true ]]; then
+				log_info "[DRY-RUN] Would create symlink: machine.conf -> $(hostname).conf"
+			else
+				create_symlink "$hypr_machine_source" "$hypr_machine_dest"
+				log_success "Linked machine config for $(hostname)"
+			fi
+		else
+			log_warn "No machine-specific hyprland config found for $(hostname)"
+		fi
+
 		# Add source line to system hyprland.conf
 		if [[ -f "$hypr_system_conf" ]]; then
 			local hypr_source_line='# Source Omarchy overrides
