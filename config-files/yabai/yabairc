@@ -12,6 +12,7 @@
 #
 
 sudo yabai --load-sa
+sleep 1
 yabai -m signal --add event=dock_did_restart action="sudo yabai --load-sa"
 
 # global settings
@@ -31,11 +32,11 @@ yabai -m config                                 \
     window_opacity_duration      0.0            \
     active_window_opacity        1.0            \
     normal_window_opacity        0.90           \
-    window_opacity               off            \
+    window_opacity               on             \
     insert_feedback_color        0xffd75f5f     \
     split_ratio                  0.50           \
     split_type                   off            \
-    auto_balance                 on             \
+    auto_balance                 off            \
     top_padding                  12             \
     bottom_padding               12             \
     left_padding                 12             \
@@ -75,6 +76,7 @@ _setup_spaces
 # On external monitor connect: label it and move spaces 6-9 to it
 yabai -m signal --add event=display_added \
     action="sleep 1; \
+            yabai -m display 1 --label macbook; \
             yabai -m display 2 --label external; \
             for i in \$(seq 1 9); do yabai -m query --spaces --space \"\$i\" &>/dev/null || yabai -m space --create; done; \
             for i in 6 7 8 9; do yabai -m space \"\$i\" --display external; done"
@@ -91,7 +93,7 @@ yabai -m signal --add event=display_moved \
 
 # After wake from sleep: re-label displays and redistribute spaces
 yabai -m signal --add event=system_woke \
-    action="sleep 2; \
+    action="sleep 3; \
             yabai -m display 1 --label macbook; \
             DISPLAY_COUNT=\$(yabai -m query --displays | jq 'length'); \
             if [ \"\$DISPLAY_COUNT\" -ge 2 ]; then yabai -m display 2 --label external; fi; \
