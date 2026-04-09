@@ -1,7 +1,7 @@
 [submodule "nvim"]
   path = config-files/nvim
   url = git@github.com:vitorpacheco/nvim-config.git
-  branch = main
+  branch = nvim_rewrite_0.12
 [submodule "tmux-catppuccin"]
   path = user-files/.tmux/plugins/tmux
   url = git@github.com:catppuccin/tmux.git
