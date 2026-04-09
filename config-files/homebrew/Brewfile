@@ -36,3 +36,5 @@ brew "jdtls"
 brew "lazydocker"
 # Package manager for the Lua programming language
 brew "luarocks"
+# HuggingFace CLI
+brew "hf"

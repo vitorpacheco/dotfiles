@@ -36,6 +36,7 @@
 #   LLAMA_THREADS_BATCH=12  batch processing threads
 #   LLAMA_THREADS_HTTP=4    HTTP handler threads
 #   LLAMA_PARALLEL=2        concurrent inference slots (recommended for 8GB VRAM)
+#   LLAMA_CTX_SIZE_QWEN3_5=262144  context for Qwen3.5 Unsloth presets
 #   LLAMA_DIR               path to the llama.cpp checkout
 #   LLAMA_SERVER            override the llama-server binary path
 #
@@ -79,6 +80,7 @@ DEFAULT_THREADS_HTTP="4"
 DEFAULT_PARALLEL="8"
 DEFAULT_CTX_SIZE_LARGE="65536"
 DEFAULT_CTX_SIZE_SMALL="16384"
+DEFAULT_CTX_SIZE_QWEN3_5="262144"
 DEFAULT_BENCH_REQUESTS="10"
 DEFAULT_BENCH_N_PREDICT="256"
 DEFAULT_API_KEY=""
@@ -130,6 +132,7 @@ LLAMA_THREADS_HTTP="${LLAMA_THREADS_HTTP:-${THREADS_HTTP:-$DEFAULT_THREADS_HTTP}
 LLAMA_PARALLEL="${LLAMA_PARALLEL:-${PARALLEL:-$DEFAULT_PARALLEL}}"
 LLAMA_CTX_SIZE_LARGE="${LLAMA_CTX_SIZE_LARGE:-${CTX_SIZE_LARGE:-$DEFAULT_CTX_SIZE_LARGE}}"
 LLAMA_CTX_SIZE_SMALL="${LLAMA_CTX_SIZE_SMALL:-${CTX_SIZE_SMALL:-$DEFAULT_CTX_SIZE_SMALL}}"
+LLAMA_CTX_SIZE_QWEN3_5="${LLAMA_CTX_SIZE_QWEN3_5:-${CTX_SIZE_QWEN3_5:-$DEFAULT_CTX_SIZE_QWEN3_5}}"
 BENCH_REQUESTS="${BENCH_REQUESTS:-${BENCH_REQUESTS_CONF:-$DEFAULT_BENCH_REQUESTS}}"
 BENCH_N_PREDICT="${BENCH_N_PREDICT:-${BENCH_N_PREDICT_CONF:-$DEFAULT_BENCH_N_PREDICT}}"
 LLAMA_API_KEY="${LLAMA_API_KEY:-${API_KEY:-$DEFAULT_API_KEY}}"
@@ -189,9 +192,7 @@ declare -A MODEL_ARGS=(
     --n-gpu-layers auto
   "
 
-  # Qwen3.5 9B GGUF local (hybrid DeltaNet arch — GPU support pending in llama.cpp)
-  # Non-thinking mode default: temp=0.7, top_p=0.8 (Qwen3.5 general tasks)
-  # Use --reasoning flag for thinking mode
+  # Qwen3.5 9B (Bartowski Q4_K_M)
   [qwen3_5]="
     -m $MODELS_DIR/Qwen_Qwen3.5-9B-Q4_K_M.gguf
     --jinja
@@ -205,6 +206,47 @@ declare -A MODEL_ARGS=(
     --temperature 0.7
     --top-p 0.8
     --min-p 0.0
+    --n-gpu-layers auto
+  "
+
+  # Qwen3.5 9B (Unsloth Dynamic Q4_K_XL) — coding-tuned defaults from Unsloth
+  # Precise coding (thinking mode): temp=0.6, top_p=0.95, top_k=20,
+  # min_p=0.0, presence_penalty=0.0, repeat_penalty=1.0
+  [qwen3_5_u9b]="
+    -m $MODELS_DIR/Qwen3.5-9B-UD-Q4_K_XL.gguf
+    --jinja
+    --ctx-size $LLAMA_CTX_SIZE_QWEN3_5
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn on
+    --cache-type-k q4_0
+    --cache-type-v q4_0
+    --temperature 0.6
+    --top-p 0.95
+    --top-k 20
+    --min-p 0.0
+    --presence-penalty 0.0
+    --repeat-penalty 1.0
+    --n-gpu-layers auto
+  "
+
+  # Qwen3.5 4B (Unsloth Dynamic Q4_K_XL) — faster coding-tuned fallback
+  # Same coding defaults as 9B for easier apples-to-apples comparison
+  [qwen3_5_u4b]="
+    -m $MODELS_DIR/Qwen3.5-4B-UD-Q4_K_XL.gguf
+    --jinja
+    --ctx-size $LLAMA_CTX_SIZE_QWEN3_5
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn on
+    --cache-type-k q4_0
+    --cache-type-v q4_0
+    --temperature 0.6
+    --top-p 0.95
+    --top-k 20
+    --min-p 0.0
+    --presence-penalty 0.0
+    --repeat-penalty 1.0
     --n-gpu-layers auto
   "
 
@@ -272,13 +314,14 @@ declare -A MODEL_ARGS=(
   "
 
   # Gemma 4 E4B (IQ4_NL)
-  # Good fit for donan (8GB VRAM) with mixed CPU/GPU inference.
+  # Tuned for larger context windows in coding agents (OpenCode/Continue/pi).
+  # Trade-off: lower batch/ubatch for stability at higher ctx (slower throughput).
   [gemma4_e4b]="
     -m $MODELS_DIR/gemma-4-E4B-it-IQ4_NL.gguf
     --jinja
-    --ctx-size $LLAMA_CTX_SIZE_SMALL
-    --batch-size 1024
-    --ubatch-size 256
+    --ctx-size $LLAMA_CTX_SIZE_LARGE
+    --batch-size 512
+    --ubatch-size 128
     --flash-attn on
     --cache-type-k q4_0
     --cache-type-v q4_0
@@ -289,13 +332,13 @@ declare -A MODEL_ARGS=(
   "
 
   # Gemma 4 E4B multimodal preset.
-  # Requires an mmproj file (downloaded automatically when configured below).
+  # Same larger-context profile as text-only preset, with reduced batch for stability.
   [gemma4_e4b_vision]="
     -m $MODELS_DIR/gemma-4-E4B-it-IQ4_NL.gguf
     --jinja
-    --ctx-size $LLAMA_CTX_SIZE_SMALL
-    --batch-size 1024
-    --ubatch-size 256
+    --ctx-size $LLAMA_CTX_SIZE_LARGE
+    --batch-size 512
+    --ubatch-size 128
     --flash-attn on
     --cache-type-k q4_0
     --cache-type-v q4_0
@@ -330,6 +373,8 @@ declare -A MODEL_PORT=(
   [qwen2_5-coder]=8084
   [qwen3]=8084
   [qwen3_5]=8084
+  [qwen3_5_u9b]=8084
+  [qwen3_5_u4b]=8084
   [gpt-oss]=8084
   [gemma4_e4b]=8084
   [gemma4_e4b_vision]=8084
@@ -344,6 +389,8 @@ declare -A MODEL_HF=(
   [qwen2_5-coder]="Qwen/Qwen2.5-Coder-7B-Instruct-GGUF qwen2.5-coder-7b-instruct-q4_k_m.gguf"
   [qwen3]="Qwen/Qwen3-8B-GGUF Qwen3-8B-Q4_K_M.gguf"
   [qwen3_5]="bartowski/Qwen_Qwen3.5-9B-GGUF Qwen_Qwen3.5-9B-Q4_K_M.gguf"
+  [qwen3_5_u9b]="unsloth/Qwen3.5-9B-GGUF Qwen3.5-9B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u4b]="unsloth/Qwen3.5-4B-GGUF Qwen3.5-4B-UD-Q4_K_XL.gguf"
   [nemotron-nano]="bartowski/nvidia_Nemotron-3-Nano-30B-A3B-GGUF nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
   [qwen3_coder_next]="unsloth/Qwen3-Coder-Next-GGUF Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
   [glm_4_7_flash]="unsloth/GLM-4.7-Flash-GGUF GLM-4.7-Flash-UD-Q4_K_XL.gguf"
@@ -352,13 +399,15 @@ declare -A MODEL_HF=(
 )
 
 # Models that support reasoning/thinking mode (--reasoning-budget)
-REASONING_MODELS=(qwen3 qwen3_5 gpt-oss nemotron-nano glm_4_7_flash)
+REASONING_MODELS=(qwen3 qwen3_5 qwen3_5_u9b qwen3_5_u4b gpt-oss nemotron-nano glm_4_7_flash)
 
 # Local path for each model file
 declare -A MODEL_PATH=(
   [qwen2_5-coder]="$MODELS_DIR/qwen2.5-coder-7b-instruct-q4_k_m.gguf"
   [qwen3]="$MODELS_DIR/Qwen3-8B-Q4_K_M.gguf"
   [qwen3_5]="$MODELS_DIR/Qwen_Qwen3.5-9B-Q4_K_M.gguf"
+  [qwen3_5_u9b]="$MODELS_DIR/Qwen3.5-9B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u4b]="$MODELS_DIR/Qwen3.5-4B-UD-Q4_K_XL.gguf"
   [nemotron-nano]="$MODELS_DIR/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
   [qwen3_coder_next]="$MODELS_DIR/Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
   [glm_4_7_flash]="$MODELS_DIR/GLM-4.7-Flash-UD-Q4_K_XL.gguf"
@@ -371,11 +420,18 @@ declare -A MODEL_PATH=(
 declare -A MODEL_DRAFT_HF=(
   [qwen2_5-coder]="Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF qwen2.5-coder-0.5b-instruct-q4_k_m.gguf"
   [qwen3]="Qwen/Qwen3-0.6B-GGUF Qwen3-0.6B-Q8_0.gguf"
+  # Qwen3.5 draft model for speculative decoding (shared across 9B / 4B presets)
+  [qwen3_5]="unsloth/Qwen3.5-0.8B-GGUF Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u9b]="unsloth/Qwen3.5-0.8B-GGUF Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u4b]="unsloth/Qwen3.5-0.8B-GGUF Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
 )
 
 declare -A MODEL_DRAFT_PATH=(
   [qwen2_5-coder]="$MODELS_DIR/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf"
   [qwen3]="$MODELS_DIR/Qwen3-0.6B-Q8_0.gguf"
+  [qwen3_5]="$MODELS_DIR/Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u9b]="$MODELS_DIR/Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u4b]="$MODELS_DIR/Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
 )
 
 # Vision projector files for multimodal models
@@ -392,18 +448,93 @@ declare -A MODEL_MM_PROJ_PATH=(
 # Model management
 # =============================================================================
 
-download_model_file() {
-  local repo="$1" file="$2" dest="$3"
-  if command -v huggingface-cli &>/dev/null; then
-    huggingface-cli download "$repo" "$file" --local-dir "$(dirname "$dest")"
-  elif command -v wget &>/dev/null; then
-    wget --continue "https://huggingface.co/$repo/resolve/main/$file" -O "$dest"
-  elif command -v curl &>/dev/null; then
-    curl -L --continue-at - "https://huggingface.co/$repo/resolve/main/$file" -o "$dest"
+get_python_cmd() {
+  [[ -n "${PYTHON_CMD:-}" ]] && { echo "$PYTHON_CMD"; return 0; }
+
+  if command -v python3 &>/dev/null; then
+    PYTHON_CMD="$(command -v python3)"
+  elif command -v python &>/dev/null; then
+    PYTHON_CMD="$(command -v python)"
   else
-    echo "Error: install huggingface-cli, wget, or curl to download models"
+    echo "Error: python3 not found in PATH"
     exit 1
   fi
+
+  echo "$PYTHON_CMD"
+}
+
+ensure_hf_python_tools() {
+  local py
+  py="$(get_python_cmd)"
+
+  if ! "$py" -c "import huggingface_hub, hf_transfer" &>/dev/null; then
+    echo "Error: missing Python packages: huggingface_hub hf_transfer"
+    echo "Install with: $py -m pip install --upgrade huggingface_hub hf_transfer"
+    exit 1
+  fi
+}
+
+ensure_hf_logged_in() {
+  if ! command -v hf &>/dev/null; then
+    echo "Error: 'hf' CLI not found. Install it and run: hf auth login"
+    exit 1
+  fi
+
+  if ! hf auth whoami &>/dev/null; then
+    echo "Error: HuggingFace not authenticated. Please run: hf auth login"
+    exit 1
+  fi
+}
+
+download_model_file() {
+  local repo="$1" file="$2" dest="$3"
+  ensure_hf_python_tools
+  ensure_hf_logged_in
+
+  local py
+  py="$(get_python_cmd)"
+  mkdir -p "$(dirname "$dest")"
+
+  local max_attempts=7
+  local attempt=1
+  while [[ $attempt -le $max_attempts ]]; do
+    # HF_HUB_DISABLE_XET avoids xet-read-token calls that can trigger 429s.
+    if HF_HUB_ENABLE_HF_TRANSFER=1 HF_HUB_DISABLE_XET=1 "$py" - "$repo" "$file" "$dest" <<'PYEOF'
+import os
+import shutil
+import sys
+from huggingface_hub import hf_hub_download
+
+repo_id, filename, dest = sys.argv[1], sys.argv[2], sys.argv[3]
+dest = os.path.abspath(dest)
+os.makedirs(os.path.dirname(dest), exist_ok=True)
+
+path = hf_hub_download(
+    repo_id=repo_id,
+    filename=filename,
+    local_dir=os.path.dirname(dest),
+    resume_download=True,
+)
+path = os.path.abspath(path)
+if path != dest:
+    shutil.move(path, dest)
+PYEOF
+    then
+      return 0
+    fi
+
+    if [[ $attempt -lt $max_attempts ]]; then
+      local backoff=$((2 ** (attempt - 1)))
+      [[ $backoff -gt 30 ]] && backoff=30
+      echo "Download retry $attempt/$max_attempts failed (likely HuggingFace rate-limit). Retrying in ${backoff}s..."
+      sleep "$backoff"
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  echo "Error: failed to download $file from $repo after $max_attempts attempts"
+  echo "Hint: ensure you are authenticated: 'hf auth login'"
+  exit 1
 }
 
 hf_lfs_sha256() {
@@ -855,6 +986,9 @@ THREADS_HTTP=4
 # Number of parallel inference slots
 PARALLEL=2
 
+# Qwen3.5 Unsloth presets context window (for coding agents / tools)
+CTX_SIZE_QWEN3_5=262144
+
 # ============================================================================
 # Benchmark Settings
 # ============================================================================
@@ -914,6 +1048,7 @@ show_profile() {
   echo "  LLAMA_PARALLEL:     $LLAMA_PARALLEL"
   echo "  CTX_SIZE_LARGE:     $LLAMA_CTX_SIZE_LARGE"
   echo "  CTX_SIZE_SMALL:     $LLAMA_CTX_SIZE_SMALL"
+  echo "  CTX_SIZE_QWEN3_5:   $LLAMA_CTX_SIZE_QWEN3_5"
   echo ""
 
   if [[ -n "$model" ]]; then
@@ -939,7 +1074,7 @@ Usage:
   llm-server benchmark <model>
   llm-server <model> [flags] [-- extra llama-server args...]
 
-Models: qwen2_5-coder | qwen3 | qwen3_5 | gpt-oss | nemotron-nano | qwen3_coder_next | glm_4_7_flash | gemma4_e4b | gemma4_e4b_vision
+Models: qwen2_5-coder | qwen3 | qwen3_5 | qwen3_5_u9b | qwen3_5_u4b | gpt-oss | nemotron-nano | qwen3_coder_next | glm_4_7_flash | gemma4_e4b | gemma4_e4b_vision
 
 Commands:
   setup               clone/update llama.cpp and build with CUDA (RTX 3070 Ti + 5700X)
@@ -964,6 +1099,7 @@ Configuration:
 Env overrides (5700X defaults):
   LLAMA_THREADS=8       LLAMA_THREADS_BATCH=12
   LLAMA_THREADS_HTTP=4  LLAMA_PARALLEL=2
+  LLAMA_CTX_SIZE_QWEN3_5=262144
   LLAMA_DIR=$HOME/applications/llama.cpp
   BENCH_REQUESTS=10     BENCH_N_PREDICT=256
 
@@ -976,6 +1112,8 @@ Examples:
   llm-server qwen3 --draft
   llm-server qwen3 --reasoning
   llm-server qwen3 --update
+  llm-server qwen3_5_u9b
+  llm-server qwen3_5_u4b
   llm-server qwen2_5-coder --port 9000
   llm-server qwen3_coder_next
   llm-server gemma4_e4b
