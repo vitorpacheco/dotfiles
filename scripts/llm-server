@@ -17,6 +17,13 @@
 #                         BENCH_REQUESTS=10   number of timed requests
 #                         BENCH_N_PREDICT=256 tokens to generate per request
 #
+#   router [flags]      Start multi-model router server. Enables running
+#                       multiple models simultaneously with API-based routing.
+#                       Small model runs on CPU (for autocompletion), big models
+#                       run on GPU (for complex tasks). Useful for IDEs like
+#                       Continue that need both fast FIM and powerful chat.
+#                       Flags: --small, --big, --reasoning, --port, --models-max
+#
 #   <model>             Start the llama-server for the given model. Downloads
 #                       the GGUF file automatically if not present locally.
 #
@@ -28,7 +35,6 @@
 #   --no-reasoning      Disable reasoning mode (default)
 #   --draft             Enable speculative decoding with the model's draft model
 #   --no-draft          Disable speculative decoding (default)
-#   --update            Check HuggingFace for a newer GGUF and re-download
 #   --                  Everything after this is passed directly to llama-server
 #
 # PERFORMANCE KNOBS (env overrides, tuned for Ryzen 7 5700X)
@@ -137,6 +143,15 @@ BENCH_REQUESTS="${BENCH_REQUESTS:-${BENCH_REQUESTS_CONF:-$DEFAULT_BENCH_REQUESTS
 BENCH_N_PREDICT="${BENCH_N_PREDICT:-${BENCH_N_PREDICT_CONF:-$DEFAULT_BENCH_N_PREDICT}}"
 LLAMA_API_KEY="${LLAMA_API_KEY:-${API_KEY:-$DEFAULT_API_KEY}}"
 
+# Router defaults
+DEFAULT_ROUTER_SMALL_MODEL="qwen3_5_u08b"
+DEFAULT_ROUTER_BIG_MODELS="qwen3_5_u9b,gemma4_e4b,gemma4_e4b_q8"
+DEFAULT_ROUTER_MODELS_MAX="4"
+
+ROUTER_SMALL_MODEL="${ROUTER_SMALL_MODEL:-$DEFAULT_ROUTER_SMALL_MODEL}"
+ROUTER_BIG_MODELS="${ROUTER_BIG_MODELS:-$DEFAULT_ROUTER_BIG_MODELS}"
+ROUTER_MODELS_MAX="${ROUTER_MODELS_MAX:-$DEFAULT_ROUTER_MODELS_MAX}"
+
 # Skip binary detection for setup/profile (binary may not exist yet)
 if [[ "${1:-}" != "setup" && "${1:-}" != "profile" ]]; then
   if [[ -n "${LLAMA_SERVER:-}" ]]; then
@@ -192,12 +207,11 @@ declare -A MODEL_ARGS=(
     --n-gpu-layers auto
   "
 
-  # Qwen3.5 9B (Bartowski Q4_K_M)
+  # Qwen3.5 9B (Bartowski Q4_K_M) — non-thinking mode
   [qwen3_5]="
     -m $MODELS_DIR/Qwen_Qwen3.5-9B-Q4_K_M.gguf
     --jinja
     --ctx-size $LLAMA_CTX_SIZE_LARGE
-    --reasoning off
     --batch-size 1024
     --ubatch-size 256
     --flash-attn on
@@ -205,13 +219,15 @@ declare -A MODEL_ARGS=(
     --cache-type-v q4_0
     --temperature 0.7
     --top-p 0.8
+    --top-k 20
     --min-p 0.0
+    --presence-penalty 1.5
+    --repeat-penalty 1.0
     --n-gpu-layers auto
   "
 
-  # Qwen3.5 9B (Unsloth Dynamic Q4_K_XL) — coding-tuned defaults from Unsloth
-  # Precise coding (thinking mode): temp=0.6, top_p=0.95, top_k=20,
-  # min_p=0.0, presence_penalty=0.0, repeat_penalty=1.0
+  # Qwen3.5 9B (Unsloth Dynamic Q4_K_XL) — thinking mode enabled by default
+  # Precise coding: temp=0.6, top_p=0.95, top_k=20, min_p=0.0
   [qwen3_5_u9b]="
     -m $MODELS_DIR/Qwen3.5-9B-UD-Q4_K_XL.gguf
     --jinja
@@ -230,14 +246,51 @@ declare -A MODEL_ARGS=(
     --n-gpu-layers auto
   "
 
-  # Qwen3.5 4B (Unsloth Dynamic Q4_K_XL) — faster coding-tuned fallback
-  # Same coding defaults as 9B for easier apples-to-apples comparison
+  # Qwen3.5 4B (Unsloth Dynamic Q4_K_XL) — thinking mode enabled by default
   [qwen3_5_u4b]="
     -m $MODELS_DIR/Qwen3.5-4B-UD-Q4_K_XL.gguf
     --jinja
     --ctx-size $LLAMA_CTX_SIZE_QWEN3_5
     --batch-size 1024
-    --ubatch-size 256
+    --ubatch-size 512
+    --flash-attn on
+    --cache-type-k q4_0
+    --cache-type-v q4_0
+    --temperature 0.6
+    --top-p 0.95
+    --top-k 20
+    --min-p 0.0
+    --presence-penalty 0.0
+    --repeat-penalty 1.0
+    --n-gpu-layers auto
+  "
+
+  # Qwen3.5 2B (Unsloth Dynamic Q4_K_XL) — ultra fast, 5.5GB
+  [qwen3_5_u2b]="
+    -m $MODELS_DIR/Qwen3.5-2B-UD-Q4_K_XL.gguf
+    --jinja
+    --ctx-size $LLAMA_CTX_SIZE_QWEN3_5
+    --batch-size 1024
+    --ubatch-size 512
+    --flash-attn on
+    --cache-type-k q4_0
+    --cache-type-v q4_0
+    --temperature 0.6
+    --top-p 0.95
+    --top-k 20
+    --min-p 0.0
+    --presence-penalty 0.0
+    --repeat-penalty 1.0
+    --n-gpu-layers auto
+  "
+
+  # Qwen3.5 0.8B (Unsloth Dynamic Q4_K_XL) — minimal, 3.5GB
+  [qwen3_5_u08b]="
+    -m $MODELS_DIR/Qwen3.5-0.8B-UD-Q4_K_XL.gguf
+    --jinja
+    --ctx-size $LLAMA_CTX_SIZE_QWEN3_5
+    --batch-size 1024
+    --ubatch-size 512
     --flash-attn on
     --cache-type-k q4_0
     --cache-type-v q4_0
@@ -316,6 +369,8 @@ declare -A MODEL_ARGS=(
   # Gemma 4 E4B (IQ4_NL)
   # Tuned for larger context windows in coding agents (OpenCode/Continue/pi).
   # Trade-off: lower batch/ubatch for stability at higher ctx (slower throughput).
+  # Parameters: Google-recommended temp=1.0, top_p=0.95, top_k=64
+  # Thinking: use --reasoning flag to enable (default: disabled)
   [gemma4_e4b]="
     -m $MODELS_DIR/gemma-4-E4B-it-IQ4_NL.gguf
     --jinja
@@ -325,8 +380,9 @@ declare -A MODEL_ARGS=(
     --flash-attn on
     --cache-type-k q4_0
     --cache-type-v q4_0
-    --temperature 0.7
-    --top-p 0.9
+    --temperature 1.0
+    --top-p 0.95
+    --top-k 64
     --min-p 0.0
     --n-gpu-layers auto
   "
@@ -344,6 +400,27 @@ declare -A MODEL_ARGS=(
     --cache-type-v q4_0
     --temperature 0.7
     --top-p 0.9
+    --min-p 0.0
+    --n-gpu-layers auto
+  "
+
+  # Gemma 4 E4B (Q8_0) - 8-bit quantization for higher quality
+  # Requires ~9-12GB total memory, may need partial offload on 8GB VRAM
+  # Use smaller context or reduced GPU layers if you hit OOM
+  # Parameters: Google-recommended temp=1.0, top_p=0.95, top_k=64
+  # Thinking: use --reasoning flag to enable (default: disabled)
+  [gemma4_e4b_q8]="
+    -m $MODELS_DIR/gemma-4-E4B-it-Q8_0.gguf
+    --jinja
+    --ctx-size $LLAMA_CTX_SIZE_LARGE
+    --batch-size 512
+    --ubatch-size 128
+    --flash-attn on
+    --cache-type-k q4_0
+    --cache-type-v q4_0
+    --temperature 1.0
+    --top-p 0.95
+    --top-k 64
     --min-p 0.0
     --n-gpu-layers auto
   "
@@ -375,9 +452,12 @@ declare -A MODEL_PORT=(
   [qwen3_5]=8084
   [qwen3_5_u9b]=8084
   [qwen3_5_u4b]=8084
+  [qwen3_5_u2b]=8084
+  [qwen3_5_u08b]=8084
   [gpt-oss]=8084
   [gemma4_e4b]=8084
   [gemma4_e4b_vision]=8084
+  [gemma4_e4b_q8]=8084
   [nemotron-nano]=8084
   [qwen3_coder_next]=8084
   [glm_4_7_flash]=8084
@@ -391,15 +471,18 @@ declare -A MODEL_HF=(
   [qwen3_5]="bartowski/Qwen_Qwen3.5-9B-GGUF Qwen_Qwen3.5-9B-Q4_K_M.gguf"
   [qwen3_5_u9b]="unsloth/Qwen3.5-9B-GGUF Qwen3.5-9B-UD-Q4_K_XL.gguf"
   [qwen3_5_u4b]="unsloth/Qwen3.5-4B-GGUF Qwen3.5-4B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u2b]="unsloth/Qwen3.5-2B-GGUF Qwen3.5-2B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u08b]="unsloth/Qwen3.5-0.8B-GGUF Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
   [nemotron-nano]="bartowski/nvidia_Nemotron-3-Nano-30B-A3B-GGUF nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
   [qwen3_coder_next]="unsloth/Qwen3-Coder-Next-GGUF Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
   [glm_4_7_flash]="unsloth/GLM-4.7-Flash-GGUF GLM-4.7-Flash-UD-Q4_K_XL.gguf"
   [gemma4_e4b]="unsloth/gemma-4-E4B-it-GGUF gemma-4-E4B-it-IQ4_NL.gguf"
   [gemma4_e4b_vision]="unsloth/gemma-4-E4B-it-GGUF gemma-4-E4B-it-IQ4_NL.gguf"
+  [gemma4_e4b_q8]="unsloth/gemma-4-E4B-it-GGUF gemma-4-E4B-it-Q8_0.gguf"
 )
 
-# Models that support reasoning/thinking mode (--reasoning-budget)
-REASONING_MODELS=(qwen3 qwen3_5 qwen3_5_u9b qwen3_5_u4b gpt-oss nemotron-nano glm_4_7_flash)
+# Models that support --chat-template-kwargs for thinking toggle
+REASONING_MODELS=(qwen3 qwen3_5 qwen3_5_u9b qwen3_5_u4b qwen3_5_u2b qwen3_5_u08b gpt-oss nemotron-nano glm_4_7_flash gemma4_e4b gemma4_e4b_vision gemma4_e4b_q8)
 
 # Local path for each model file
 declare -A MODEL_PATH=(
@@ -408,22 +491,26 @@ declare -A MODEL_PATH=(
   [qwen3_5]="$MODELS_DIR/Qwen_Qwen3.5-9B-Q4_K_M.gguf"
   [qwen3_5_u9b]="$MODELS_DIR/Qwen3.5-9B-UD-Q4_K_XL.gguf"
   [qwen3_5_u4b]="$MODELS_DIR/Qwen3.5-4B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u2b]="$MODELS_DIR/Qwen3.5-2B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u08b]="$MODELS_DIR/Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
   [nemotron-nano]="$MODELS_DIR/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
   [qwen3_coder_next]="$MODELS_DIR/Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
   [glm_4_7_flash]="$MODELS_DIR/GLM-4.7-Flash-UD-Q4_K_XL.gguf"
   [gemma4_e4b]="$MODELS_DIR/gemma-4-E4B-it-IQ4_NL.gguf"
   [gemma4_e4b_vision]="$MODELS_DIR/gemma-4-E4B-it-IQ4_NL.gguf"
+  [gemma4_e4b_q8]="$MODELS_DIR/gemma-4-E4B-it-Q8_0.gguf"
 )
 
 # Draft models for speculative decoding (must share tokenizer with the target)
-# Speculative decoding is most impactful when the target runs below ~15 t/s.
+# Qwen3.5 0.8B serves as draft for all Small models
 declare -A MODEL_DRAFT_HF=(
   [qwen2_5-coder]="Qwen/Qwen2.5-Coder-0.5B-Instruct-GGUF qwen2.5-coder-0.5b-instruct-q4_k_m.gguf"
   [qwen3]="Qwen/Qwen3-0.6B-GGUF Qwen3-0.6B-Q8_0.gguf"
-  # Qwen3.5 draft model for speculative decoding (shared across 9B / 4B presets)
   [qwen3_5]="unsloth/Qwen3.5-0.8B-GGUF Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
   [qwen3_5_u9b]="unsloth/Qwen3.5-0.8B-GGUF Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
   [qwen3_5_u4b]="unsloth/Qwen3.5-0.8B-GGUF Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u2b]="unsloth/Qwen3.5-0.8B-GGUF Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u08b]="unsloth/Qwen3.5-0.8B-GGUF Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
 )
 
 declare -A MODEL_DRAFT_PATH=(
@@ -432,134 +519,36 @@ declare -A MODEL_DRAFT_PATH=(
   [qwen3_5]="$MODELS_DIR/Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
   [qwen3_5_u9b]="$MODELS_DIR/Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
   [qwen3_5_u4b]="$MODELS_DIR/Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u2b]="$MODELS_DIR/Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
+  [qwen3_5_u08b]="$MODELS_DIR/Qwen3.5-0.8B-UD-Q4_K_XL.gguf"
 )
 
 # Vision projector files for multimodal models
 # Format: "owner/repo filename" on HuggingFace
 declare -A MODEL_MM_PROJ_HF=(
   [gemma4_e4b_vision]="unsloth/gemma-4-E4B-it-GGUF mmproj-F16.gguf"
+  [qwen3_5_u9b]="unsloth/Qwen3.5-9B-GGUF mmproj-F16.gguf"
+  [qwen3_5_u4b]="unsloth/Qwen3.5-4B-GGUF mmproj-F16.gguf"
+  [qwen3_5_u2b]="unsloth/Qwen3.5-2B-GGUF mmproj-F16.gguf"
+  [qwen3_5_u08b]="unsloth/Qwen3.5-0.8B-GGUF mmproj-F16.gguf"
 )
 
 declare -A MODEL_MM_PROJ_PATH=(
   [gemma4_e4b_vision]="$MODELS_DIR/mmproj-F16.gguf"
+  [qwen3_5_u9b]="$MODELS_DIR/Qwen3.5-9B-mmproj-F16.gguf"
+  [qwen3_5_u4b]="$MODELS_DIR/Qwen3.5-4B-mmproj-F16.gguf"
+  [qwen3_5_u2b]="$MODELS_DIR/Qwen3.5-2B-mmproj-F16.gguf"
+  [qwen3_5_u08b]="$MODELS_DIR/Qwen3.5-0.8B-mmproj-F16.gguf"
 )
 
 # =============================================================================
 # Model management
 # =============================================================================
 
-get_python_cmd() {
-  [[ -n "${PYTHON_CMD:-}" ]] && { echo "$PYTHON_CMD"; return 0; }
-
-  if command -v python3 &>/dev/null; then
-    PYTHON_CMD="$(command -v python3)"
-  elif command -v python &>/dev/null; then
-    PYTHON_CMD="$(command -v python)"
-  else
-    echo "Error: python3 not found in PATH"
-    exit 1
-  fi
-
-  echo "$PYTHON_CMD"
-}
-
-ensure_hf_python_tools() {
-  local py
-  py="$(get_python_cmd)"
-
-  if ! "$py" -c "import huggingface_hub, hf_transfer" &>/dev/null; then
-    echo "Error: missing Python packages: huggingface_hub hf_transfer"
-    echo "Install with: $py -m pip install --upgrade huggingface_hub hf_transfer"
-    exit 1
-  fi
-}
-
-ensure_hf_logged_in() {
-  if ! command -v hf &>/dev/null; then
-    echo "Error: 'hf' CLI not found. Install it and run: hf auth login"
-    exit 1
-  fi
-
-  if ! hf auth whoami &>/dev/null; then
-    echo "Error: HuggingFace not authenticated. Please run: hf auth login"
-    exit 1
-  fi
-}
-
-download_model_file() {
+download_hf() {
   local repo="$1" file="$2" dest="$3"
-  ensure_hf_python_tools
-  ensure_hf_logged_in
-
-  local py
-  py="$(get_python_cmd)"
   mkdir -p "$(dirname "$dest")"
-
-  local max_attempts=7
-  local attempt=1
-  while [[ $attempt -le $max_attempts ]]; do
-    # HF_HUB_DISABLE_XET avoids xet-read-token calls that can trigger 429s.
-    if HF_HUB_ENABLE_HF_TRANSFER=1 HF_HUB_DISABLE_XET=1 "$py" - "$repo" "$file" "$dest" <<'PYEOF'
-import os
-import shutil
-import sys
-from huggingface_hub import hf_hub_download
-
-repo_id, filename, dest = sys.argv[1], sys.argv[2], sys.argv[3]
-dest = os.path.abspath(dest)
-os.makedirs(os.path.dirname(dest), exist_ok=True)
-
-path = hf_hub_download(
-    repo_id=repo_id,
-    filename=filename,
-    local_dir=os.path.dirname(dest),
-    resume_download=True,
-)
-path = os.path.abspath(path)
-if path != dest:
-    shutil.move(path, dest)
-PYEOF
-    then
-      return 0
-    fi
-
-    if [[ $attempt -lt $max_attempts ]]; then
-      local backoff=$((2 ** (attempt - 1)))
-      [[ $backoff -gt 30 ]] && backoff=30
-      echo "Download retry $attempt/$max_attempts failed (likely HuggingFace rate-limit). Retrying in ${backoff}s..."
-      sleep "$backoff"
-    fi
-    attempt=$((attempt + 1))
-  done
-
-  echo "Error: failed to download $file from $repo after $max_attempts attempts"
-  echo "Hint: ensure you are authenticated: 'hf auth login'"
-  exit 1
-}
-
-hf_lfs_sha256() {
-  local repo="$1" file="$2"
-  command -v python3 &>/dev/null || return 1
-  # limit=100 avoids pagination for large repos with many quant files
-  local url="https://huggingface.co/api/models/$repo/tree/main?limit=100"
-  local json
-  if command -v curl &>/dev/null; then
-    json=$(curl -sf "$url") || return 1
-  elif command -v wget &>/dev/null; then
-    json=$(wget -qO- "$url") || return 1
-  else
-    return 1
-  fi
-  echo "$json" | python3 -c "
-import json, sys
-try:
-    for f in json.load(sys.stdin):
-        if f.get('path') == '$file' and f.get('lfs'):
-            oid = f['lfs']['oid']
-            print(oid.split(':')[-1] if ':' in oid else oid)
-            break
-except: pass
-" 2>/dev/null
+  hf download "$repo" "$file" --local-dir "$(dirname "$dest")"
 }
 
 ensure_model() {
@@ -576,13 +565,17 @@ ensure_model() {
 
   local repo file
   read -r repo file <<< "${MODEL_HF[$model]}"
-  echo "Model not found. Downloading $file from $repo..."
-  mkdir -p "$(dirname "$model_path")"
-  download_model_file "$repo" "$file" "$model_path"
-
-  local sha
-  sha=$(hf_lfs_sha256 "$repo" "$file")
-  [[ -n "$sha" ]] && echo "$sha" > "${model_path}.sha256"
+  
+  # Check if file looks like a shorthand quant (e.g., "Q8_0") or full filename
+  if [[ "$file" =~ ^[A-Z0-9_]+$ ]]; then
+    # It's a shorthand quant - llama-server -hf can handle this directly
+    echo "Model not found. Will download using -hf $repo:$file"
+    HF_DOWNLOAD_ARGS+=("-hf" "$repo:$file")
+  else
+    # It's a full filename - use hf download directly (works better with Xet)
+    echo "Model not found. Downloading $file from $repo..."
+    download_hf "$repo" "$file" "$model_path"
+  fi
 }
 
 ensure_draft_model() {
@@ -600,12 +593,7 @@ ensure_draft_model() {
   local repo file
   read -r repo file <<< "${MODEL_DRAFT_HF[$model]}"
   echo "Draft model not found. Downloading $file from $repo..."
-  mkdir -p "$(dirname "$draft_path")"
-  download_model_file "$repo" "$file" "$draft_path"
-
-  local sha
-  sha=$(hf_lfs_sha256 "$repo" "$file")
-  [[ -n "$sha" ]] && echo "$sha" > "${draft_path}.sha256"
+  download_hf "$repo" "$file" "$draft_path"
 }
 
 ensure_mmproj() {
@@ -624,51 +612,7 @@ ensure_mmproj() {
   local repo file
   read -r repo file <<< "${MODEL_MM_PROJ_HF[$model]}"
   echo "Vision projector not found. Downloading $file from $repo..."
-  mkdir -p "$(dirname "$mmproj_path")"
-  download_model_file "$repo" "$file" "$mmproj_path"
-
-  local sha
-  sha=$(hf_lfs_sha256 "$repo" "$file")
-  [[ -n "$sha" ]] && echo "$sha" > "${mmproj_path}.sha256"
-}
-
-update_model() {
-  local model="$1"
-  [[ -z "${MODEL_PATH[$model]+x}" ]] && return 0
-  [[ -z "${MODEL_HF[$model]+x}" ]] && return 0
-
-  local model_file="${MODEL_PATH[$model]}"
-  local repo file
-  read -r repo file <<< "${MODEL_HF[$model]}"
-
-  echo "Checking for updates to $model..."
-  local remote_sha
-  remote_sha=$(hf_lfs_sha256 "$repo" "$file")
-
-  if [[ -z "$remote_sha" ]]; then
-    echo "Warning: could not check remote version (requires curl and python3)"
-    return 0
-  fi
-
-  local local_sha=""
-  [[ -f "${model_file}.sha256" ]] && local_sha=$(cat "${model_file}.sha256")
-
-  if [[ "$remote_sha" == "$local_sha" ]]; then
-    echo "$model: already up to date (${remote_sha:0:8}...)"
-    return 0
-  fi
-
-  if [[ -n "$local_sha" ]]; then
-    echo "$model: update found (${local_sha:0:8}... -> ${remote_sha:0:8}...)"
-  else
-    echo "$model: downloading latest version..."
-  fi
-
-  mkdir -p "$(dirname "$model_file")"
-  [[ -f "$model_file" ]] && rm "$model_file"
-  download_model_file "$repo" "$file" "$model_file"
-  echo "$remote_sha" > "${model_file}.sha256"
-  echo "$model: updated successfully"
+  download_hf "$repo" "$file" "$mmproj_path"
 }
 
 # =============================================================================
@@ -759,11 +703,6 @@ benchmark_model() {
   # Omit --reasoning-budget entirely to truly disable reasoning mode
   local reasoning_args=()
 
-  local mmproj_args=()
-  if [[ -n "${MODEL_MM_PROJ_PATH[$model]+x}" ]]; then
-    mmproj_args=(--mmproj "${MODEL_MM_PROJ_PATH[$model]}")
-  fi
-
   local has_draft=0
   [[ -n "${MODEL_DRAFT_PATH[$model]+x}" ]] && has_draft=1
   local total_runs=$(( 1 + has_draft ))
@@ -784,7 +723,7 @@ benchmark_model() {
     ${=MODEL_ARGS[$model]} \
     "${mmproj_args[@]}" \
     --host 127.0.0.1 --port "$port" \
-    "${reasoning_args[@]}" > /dev/null 2>&1 &
+"${reasoning_args[@]}" > /dev/null 2>&1 &
   server_pid=$!
 
   if ! _bench_wait "$base_url"; then
@@ -810,10 +749,8 @@ benchmark_model() {
       --threads-http "$LLAMA_THREADS_HTTP" --parallel 1 \
       --log-disable \
       --model-draft "$draft_path" \
-      ${=MODEL_ARGS[$model]} \
-      "${mmproj_args[@]}" \
-      "${reasoning_args[@]}" > /dev/null 2>&1 &
-    server_pid=$!
+      ${=MODEL_ARGS[$model]} > /dev/null 2>&1 &
+  server_pid=$!
 
     if ! _bench_wait "$base_url"; then
       kill "$server_pid" 2>/dev/null; return 1
@@ -836,6 +773,220 @@ if b > 0 and d > 0:
 
   echo ""
   echo "==================================="
+}
+
+# =============================================================================
+# Router (multi-model server)
+# =============================================================================
+
+router_usage() {
+  cat <<EOF
+Usage:
+  llm-server router [flags]
+
+Flags:
+  --port N            Port (default: 8084)
+  --small MODEL       Small model for autocompletion (default: qwen3_5_u08b)
+  --big MODELS        Comma-separated big models (default: qwen3_5_u9b,gemma4_e4b,gemma4_e4b_q8)
+  --reasoning         Enable reasoning for big models (Qwen3 family)
+  --no-reasoning      Disable reasoning (default)
+  --no-autoload       Disable auto-load on request
+  --models-max N      Max models loaded simultaneously (default: 4)
+  --host HOST         Bind address (default: 0.0.0.0)
+  --                  Everything after this is passed to llama-server
+
+Available models for router:
+  Small (CPU):  qwen3_5_u08b, qwen3_5_u2b
+  Big (GPU):    qwen3_5_u9b, qwen3_5_u4b, qwen3_5_u2b, gemma4_e4b, gemma4_e4b_q8
+
+Examples:
+  llm-server router
+  llm-server router --small qwen3_5_u2b
+  llm-server router --big qwen3_5_u9b,gemma4_e4b
+  llm-server router --big qwen3_5_u9b,gemma4_e4b_q8
+  llm-server router --big gemma4_e4b_q8
+  llm-server router --reasoning
+  llm-server router --port 9000
+EOF
+}
+
+run_router() {
+  local host="$SERVER_HOST"
+  local port="$SERVER_PORT"
+  local small_model="$ROUTER_SMALL_MODEL"
+  local big_models="$ROUTER_BIG_MODELS"
+  local models_max="$ROUTER_MODELS_MAX"
+  local reasoning=0
+  local autoload=true
+  local passthru=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --host)
+      [[ $# -lt 2 ]] && { echo "Error: --host requires a value"; exit 1; }
+      host="$2"; shift 2
+      ;;
+    --port)
+      [[ $# -lt 2 ]] && { echo "Error: --port requires a value"; exit 1; }
+      port="$2"; shift 2
+      ;;
+    --small)
+      [[ $# -lt 2 ]] && { echo "Error: --small requires a value"; exit 1; }
+      small_model="$2"; shift 2
+      ;;
+    --big)
+      [[ $# -lt 2 ]] && { echo "Error: --big requires a value"; exit 1; }
+      big_models="$2"; shift 2
+      ;;
+    --reasoning)    reasoning=1;  shift   ;;
+    --no-reasoning) reasoning=0;  shift   ;;
+    --no-autoload)  autoload=false; shift ;;
+    --models-max)
+      [[ $# -lt 2 ]] && { echo "Error: --models-max requires a value"; exit 1; }
+      models_max="$2"; shift 2
+      ;;
+    --)             shift; passthru+=("$@"); break ;;
+    -h|--help)      router_usage; exit 0 ;;
+    *)              echo "Unknown argument: $1"; router_usage; exit 1 ;;
+    esac
+  done
+
+  local valid_small=(qwen3_5_u08b qwen3_5_u2b)
+  local valid_big=(qwen3_5_u9b qwen3_5_u4b qwen3_5_u2b gemma4_e4b gemma4_e4b_q8)
+
+  local is_valid=0
+  for m in "${valid_small[@]}"; do
+    [[ "$small_model" == "$m" ]] && is_valid=1
+  done
+  if [[ $is_valid -eq 0 ]]; then
+    echo "Error: invalid small model '$small_model'"
+    echo "Valid options: ${valid_small[*]}"
+    exit 1
+  fi
+
+  IFS=',' read -A big_arr <<< "$big_models"
+  for bm in "${big_arr[@]}"; do
+    is_valid=0
+    for m in "${valid_big[@]}"; do
+      [[ "$bm" == "$m" ]] && is_valid=1
+    done
+    if [[ $is_valid -eq 0 ]]; then
+      echo "Error: invalid big model '$bm'"
+      echo "Valid options: ${valid_big[*]}"
+      exit 1
+    fi
+  done
+
+  echo "Starting router with:"
+  echo "  Small model (CPU): $small_model"
+  echo "  Big models (GPU): $big_models"
+  echo "  Port: $port"
+  echo "  Reasoning: $([ $reasoning -eq 1 ] && echo 'enabled' || echo 'disabled')"
+  echo ""
+
+  ensure_model "$small_model"
+  for bm in "${big_arr[@]}"; do
+    ensure_model "$bm"
+  done
+
+  for bm in "${big_arr[@]}"; do
+    local model_path="${MODEL_PATH[$bm]}"
+    if [[ ! -f "$model_path" && -n "${MODEL_HF[$bm]+x}" ]]; then
+      local repo file
+      read -r repo file <<< "${MODEL_HF[$bm]}"
+      echo "Downloading $bm from HuggingFace..."
+      download_hf "$repo" "$file" "$model_path"
+    fi
+  done
+
+  local small_path="${MODEL_PATH[$small_model]}"
+  if [[ ! -f "$small_path" && -n "${MODEL_HF[$small_model]+x}" ]]; then
+    local repo file
+    read -r repo file <<< "${MODEL_HF[$small_model]}"
+    echo "Downloading $small_model from HuggingFace..."
+    download_hf "$repo" "$file" "$small_path"
+  fi
+
+  local tmpfile
+  tmpfile=$(mktemp)
+
+  cat > "$tmpfile" << EOF
+version = 1
+
+[*]
+ctx-size = $LLAMA_CTX_SIZE_LARGE
+batch-size = 512
+ubatch-size = 128
+flash-attn = on
+cache-type-k = q4_0
+cache-type-v = q4_0
+parallel = 1
+
+[$small_model]
+model = ${MODEL_PATH[$small_model]}
+n-gpu-layers = 0
+temperature = 0.6
+top-p = 0.95
+load-on-startup = true
+chat-template-kwargs = {"enable_thinking":false}
+
+EOF
+
+  for bm in "${big_arr[@]}"; do
+    local n_gpu="auto"
+    local temp="0.6"
+    local top_p="0.95"
+    local reasoning_arg=""
+
+    if [[ "$bm" == gemma4* ]]; then
+      temp="1.0"
+      top_p="0.95"
+      # Gemma 4 uses chat-template-kwargs for thinking control
+      if [[ $reasoning -eq 1 ]]; then
+        reasoning_arg="chat-template-kwargs = {\"enable_thinking\":true}"
+      else
+        reasoning_arg="chat-template-kwargs = {\"enable_thinking\":false}"
+      fi
+    fi
+
+    if [[ $reasoning -eq 1 ]]; then
+      if [[ "$bm" == qwen3_5* ]]; then
+        reasoning_arg="chat-template-kwargs = {\"enable_thinking\":true}"
+      fi
+    else
+      if [[ "$bm" == qwen3_5* ]]; then
+        reasoning_arg="chat-template-kwargs = {\"enable_thinking\":false}"
+      fi
+    fi
+
+    cat >> "$tmpfile" << EOF
+[$bm]
+model = ${MODEL_PATH[$bm]}
+n-gpu-layers = $n_gpu
+temperature = $temp
+top-p = $top_p
+$reasoning_arg
+
+EOF
+  done
+
+  echo "Preset file created: $tmpfile"
+
+  local autoload_flag="--models-autoload"
+  $autoload || autoload_flag="--no-models-autoload"
+
+  # shellcheck disable=SC2086
+  exec "$LLAMA_SERVER" \
+    --threads "$LLAMA_THREADS" \
+    --threads-batch "$LLAMA_THREADS_BATCH" \
+    --threads-http "$LLAMA_THREADS_HTTP" \
+    --parallel "$LLAMA_PARALLEL" \
+    --host "$host" \
+    --port "$port" \
+    --models-preset "$tmpfile" \
+    --models-max "$models_max" \
+    $autoload_flag \
+    "${passthru[@]}"
 }
 
 # =============================================================================
@@ -1072,21 +1223,37 @@ Usage:
   llm-server setup
   llm-server profile [model]
   llm-server benchmark <model>
+  llm-server router [flags]
   llm-server <model> [flags] [-- extra llama-server args...]
 
-Models: qwen2_5-coder | qwen3 | qwen3_5 | qwen3_5_u9b | qwen3_5_u4b | gpt-oss | nemotron-nano | qwen3_coder_next | glm_4_7_flash | gemma4_e4b | gemma4_e4b_vision
+Models: qwen2_5-coder | qwen3 | qwen3_5 | qwen3_5_u9b | qwen3_5_u4b | qwen3_5_u2b | qwen3_5_u08b | gpt-oss | nemotron-nano | qwen3_coder_next | glm_4_7_flash | gemma4_e4b | gemma4_e4b_q8 | gemma4_e4b_vision
 
 Commands:
   setup               clone/update llama.cpp and build with CUDA (RTX 3070 Ti + 5700X)
   profile [model]     print active runtime profile/settings (optionally for model)
   benchmark <model>   measure throughput with and without speculative decoding
+  router [flags]      start multi-model router server (small CPU + big GPU)
+
+Router Flags:
+  --port N            Port (default: 8084)
+  --small MODEL      Small model for autocompletion (default: qwen3_5_u08b)
+  --big MODELS       Comma-separated big models (default: qwen3_5_u9b,gemma4_e4b,gemma4_e4b_q8)
+  --reasoning        Enable reasoning for big models (Qwen3 family)
+  --no-reasoning     Disable reasoning (default)
+  --no-autoload      Disable auto-load on request
+  --models-max N     Max models loaded simultaneously (default: 4)
+
+Valid router models:
+  Small (CPU):  qwen3_5_u08b, qwen3_5_u2b
+  Big (GPU):    qwen3_5_u9b, qwen3_5_u4b, qwen3_5_u2b, gemma4_e4b, gemma4_e4b_q8
 
 Flags:
   --reasoning         enable reasoning/thinking mode (Qwen3 family only)
   --no-reasoning      disable reasoning/thinking mode (default)
   --draft             enable speculative decoding with the model's draft model
   --no-draft          disable speculative decoding (default)
-  --update            check for a newer GGUF on HuggingFace and re-download if found
+  --vision            enable vision/multimodal support
+  --no-vision        disable vision support (default)
   --host HOST         bind address (default: 0.0.0.0)
   --port N            override default port (default: 8084)
   --api-key KEY       require this key on all requests
@@ -1108,17 +1275,28 @@ Examples:
   llm-server profile
   llm-server profile qwen3
   llm-server benchmark qwen3
+  llm-server router
+  llm-server router --small qwen3_5_u2b
+  llm-server router --big qwen3_5_u9b,gemma4_e4b
+  llm-server router --big qwen3_5_u9b,gemma4_e4b_q8
+  llm-server router --big gemma4_e4b_q8
+  llm-server router --reasoning
+  llm-server router --port 9000
   llm-server qwen3
   llm-server qwen3 --draft
   llm-server qwen3 --reasoning
-  llm-server qwen3 --update
   llm-server qwen3_5_u9b
   llm-server qwen3_5_u4b
+  llm-server qwen3_5_u2b
+  llm-server qwen3_5_u08b
   llm-server qwen2_5-coder --port 9000
   llm-server qwen3_coder_next
   llm-server gemma4_e4b
+  llm-server gemma4_e4b_q8
   llm-server gemma4_e4b_vision
   llm-server glm_4_7_flash --reasoning
+  llm-server gemma4_e4b_vision --vision
+  llm-server gemma4_e4b_q8 --reasoning
   llm-server qwen3 -- --log-verbosity 4
 EOF
 }
@@ -1145,6 +1323,14 @@ if [[ "$1" == "benchmark" ]]; then
   benchmark_model "$2"; exit 0
 fi
 
+if [[ "$1" == "router" ]]; then
+  run_router "${@:2}"; exit $?
+fi
+
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  usage; exit 0
+fi
+
 MODEL="$1"
 shift
 if [[ -z "${MODEL_ARGS[$MODEL]+x}" ]]; then
@@ -1155,7 +1341,8 @@ HOST="$SERVER_HOST"
 PORT="${SERVER_PORT:-${MODEL_PORT[$MODEL]}}"
 REASONING=0
 DRAFT=0
-UPDATE=0
+VISION=0
+HF_DOWNLOAD_ARGS=()
 
 # Parse script args; everything after "--" is passed directly to llama-server
 PASSTHRU=()
@@ -1180,26 +1367,33 @@ while [[ $# -gt 0 ]]; do
   --no-reasoning) REASONING=0;  shift   ;;
   --draft)        DRAFT=1;      shift   ;;
   --no-draft)     DRAFT=0;      shift   ;;
-  --update)       UPDATE=1;     shift   ;;
+  --vision)      VISION=1;      shift   ;;
+  --no-vision)   VISION=0;      shift   ;;
   --)             shift; PASSTHRU+=("$@"); break ;;
   -h|--help)      usage; exit 0 ;;
   *)              echo "Unknown argument: $1"; usage; exit 1 ;;
   esac
 done
 
-if [[ $UPDATE -eq 1 ]]; then
-  update_model "$MODEL"
-fi
 ensure_model "$MODEL"
-ensure_mmproj "$MODEL"
+if [[ $VISION -eq 1 ]]; then
+  ensure_mmproj "$MODEL"
+fi
 
-# Reasoning budget (default: disabled unless --reasoning is explicitly passed)
+# Reasoning/thinking mode via --chat-template-kwargs (Qwen3.5, Gemma 4) or --reasoning-budget (Qwen3)
+# Qwen3.5 / Gemma 4: enabled with '{"enable_thinking":true}', disabled with '{"enable_thinking":false}'
+# Qwen3: enabled with --reasoning-budget -1
 REASONING_ARGS=()
-# Only set reasoning-budget when explicitly enabled; --reasoning-budget 0 forces
-# immediate completion and causes compacted responses, so we omit the flag entirely
-# to disable reasoning mode completely.
 if printf '%s\n' "${REASONING_MODELS[@]}" | grep -qx "$MODEL"; then
-  if [[ ${REASONING:-0} -eq 1 ]]; then
+  if [[ "$MODEL" == qwen3_5* || "$MODEL" == gemma4* ]]; then
+    # Qwen3.5 and Gemma 4 use chat-template-kwargs
+    if [[ ${REASONING:-0} -eq 1 ]]; then
+      REASONING_ARGS=(--chat-template-kwargs '{"enable_thinking":true}')
+    else
+      REASONING_ARGS=(--chat-template-kwargs '{"enable_thinking":false}')
+    fi
+  elif [[ "${REASONING:-0}" -eq 1 ]]; then
+    # Qwen3 uses reasoning-budget
     REASONING_ARGS=(--reasoning-budget -1)
   fi
 fi
@@ -1219,10 +1413,15 @@ if [[ $DRAFT -eq 1 ]]; then
   fi
 fi
 
-# Vision projector
-MM_PROJ_ARGS=()
-if [[ -n "${MODEL_MM_PROJ_PATH[$MODEL]+x}" ]]; then
-  MM_PROJ_ARGS=(--mmproj "${MODEL_MM_PROJ_PATH[$MODEL]}")
+# Vision support
+VISION_ARGS=()
+if [[ $VISION -eq 1 ]]; then
+  if [[ -n "${MODEL_MM_PROJ_PATH[$MODEL]+x}" ]]; then
+    ensure_mmproj "$MODEL"
+    VISION_ARGS=(--mmproj "${MODEL_MM_PROJ_PATH[$MODEL]}")
+  else
+    echo "Warning: no vision projector configured for $MODEL, ignoring --vision"
+  fi
 fi
 
 # Check for existing process on the port
@@ -1251,9 +1450,10 @@ exec "$LLAMA_SERVER" \
   --threads-http "$LLAMA_THREADS_HTTP" \
   --parallel "$LLAMA_PARALLEL" \
   ${=MODEL_ARGS[$MODEL]} \
+  "${HF_DOWNLOAD_ARGS[@]}" \
   "${REASONING_ARGS[@]}" \
   "${DRAFT_ARGS[@]}" \
-  "${MM_PROJ_ARGS[@]}" \
+  "${VISION_ARGS[@]}" \
   "${API_KEY_ARGS[@]}" \
   --host "$HOST" \
   --port "$PORT" \
