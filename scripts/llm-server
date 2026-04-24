@@ -42,7 +42,10 @@
 #   LLAMA_THREADS_BATCH=12  batch processing threads
 #   LLAMA_THREADS_HTTP=4    HTTP handler threads
 #   LLAMA_PARALLEL=2        concurrent inference slots (recommended for 8GB VRAM)
+#   ROUTER_PARALLEL=1       router inference slots (low-VRAM default)
+#   ROUTER_CTX_SIZE=32768   router context window
 #   LLAMA_CTX_SIZE_QWEN3_5=262144  context for Qwen3.5 Unsloth presets
+#   LLAMA_CTX_SIZE_QWEN3_6=32768   context for Qwen3.6 on donan
 #   LLAMA_DIR               path to the llama.cpp checkout
 #   LLAMA_SERVER            override the llama-server binary path
 #
@@ -87,6 +90,7 @@ DEFAULT_PARALLEL="8"
 DEFAULT_CTX_SIZE_LARGE="65536"
 DEFAULT_CTX_SIZE_SMALL="16384"
 DEFAULT_CTX_SIZE_QWEN3_5="262144"
+DEFAULT_CTX_SIZE_QWEN3_6="262144"
 DEFAULT_BENCH_REQUESTS="10"
 DEFAULT_BENCH_N_PREDICT="256"
 DEFAULT_API_KEY=""
@@ -97,6 +101,7 @@ if [[ "$HOSTNAME_SHORT" == "donan" ]]; then
   # Ryzen 7 5700X + RTX 3070 Ti (8GB VRAM) tuned defaults
   DEFAULT_PARALLEL="2"
   DEFAULT_CTX_SIZE_LARGE="32768"
+  DEFAULT_CTX_SIZE_QWEN3_6="32768"
 fi
 
 # Load configuration from shell-compatible .conf file
@@ -139,18 +144,30 @@ LLAMA_PARALLEL="${LLAMA_PARALLEL:-${PARALLEL:-$DEFAULT_PARALLEL}}"
 LLAMA_CTX_SIZE_LARGE="${LLAMA_CTX_SIZE_LARGE:-${CTX_SIZE_LARGE:-$DEFAULT_CTX_SIZE_LARGE}}"
 LLAMA_CTX_SIZE_SMALL="${LLAMA_CTX_SIZE_SMALL:-${CTX_SIZE_SMALL:-$DEFAULT_CTX_SIZE_SMALL}}"
 LLAMA_CTX_SIZE_QWEN3_5="${LLAMA_CTX_SIZE_QWEN3_5:-${CTX_SIZE_QWEN3_5:-$DEFAULT_CTX_SIZE_QWEN3_5}}"
+LLAMA_CTX_SIZE_QWEN3_6="${LLAMA_CTX_SIZE_QWEN3_6:-${CTX_SIZE_QWEN3_6:-$DEFAULT_CTX_SIZE_QWEN3_6}}"
 BENCH_REQUESTS="${BENCH_REQUESTS:-${BENCH_REQUESTS_CONF:-$DEFAULT_BENCH_REQUESTS}}"
 BENCH_N_PREDICT="${BENCH_N_PREDICT:-${BENCH_N_PREDICT_CONF:-$DEFAULT_BENCH_N_PREDICT}}"
 LLAMA_API_KEY="${LLAMA_API_KEY:-${API_KEY:-$DEFAULT_API_KEY}}"
 
 # Router defaults
 DEFAULT_ROUTER_SMALL_MODEL="qwen3_5_u08b"
-DEFAULT_ROUTER_BIG_MODELS="qwen3_5_u9b,gemma4_e4b,gemma4_e4b_q8"
-DEFAULT_ROUTER_MODELS_MAX="4"
+DEFAULT_ROUTER_BIG_MODELS="qwen3_5_u9b,qwen3_6,qwen3_6_q2,gemma4_e4b,gemma4_e4b_q8,gemma4_e4b_ggml"
+# Keep only the small startup model plus one large model resident by default.
+DEFAULT_ROUTER_MODELS_MAX="2"
+DEFAULT_ROUTER_PARALLEL="1"
+DEFAULT_ROUTER_CTX_SIZE="32768"
+DEFAULT_ROUTER_BATCH_SIZE="256"
+DEFAULT_ROUTER_UBATCH_SIZE="64"
+DEFAULT_ROUTER_UBATCH_SIZE_VISION="256"
 
 ROUTER_SMALL_MODEL="${ROUTER_SMALL_MODEL:-$DEFAULT_ROUTER_SMALL_MODEL}"
 ROUTER_BIG_MODELS="${ROUTER_BIG_MODELS:-$DEFAULT_ROUTER_BIG_MODELS}"
 ROUTER_MODELS_MAX="${ROUTER_MODELS_MAX:-$DEFAULT_ROUTER_MODELS_MAX}"
+ROUTER_PARALLEL="${ROUTER_PARALLEL:-$DEFAULT_ROUTER_PARALLEL}"
+ROUTER_CTX_SIZE="${ROUTER_CTX_SIZE:-$DEFAULT_ROUTER_CTX_SIZE}"
+ROUTER_BATCH_SIZE="${ROUTER_BATCH_SIZE:-$DEFAULT_ROUTER_BATCH_SIZE}"
+ROUTER_UBATCH_SIZE="${ROUTER_UBATCH_SIZE:-$DEFAULT_ROUTER_UBATCH_SIZE}"
+ROUTER_UBATCH_SIZE_VISION="${ROUTER_UBATCH_SIZE_VISION:-$DEFAULT_ROUTER_UBATCH_SIZE_VISION}"
 
 # Skip binary detection for setup/profile (binary may not exist yet)
 if [[ "${1:-}" != "setup" && "${1:-}" != "profile" ]]; then
@@ -316,6 +333,7 @@ declare -A MODEL_ARGS=(
     --flash-attn on
     --cache-type-k q4_0
     --cache-type-v q4_0
+    --cpu-moe
     --top-k 40
     --min-p 0.01
     --temperature 1.0
@@ -340,8 +358,57 @@ declare -A MODEL_ARGS=(
     --flash-attn on
     --cache-type-k q4_0
     --cache-type-v q4_0
+    --cpu-moe
     --temperature 1.0
     --top-p 0.95
+    --repeat-penalty 1.0
+    --n-gpu-layers auto
+  "
+
+  # Qwen3.6 35B-A3B MoE (~3B active params), tuned for donan throughput.
+  # --cpu-moe keeps expert weights in RAM; attention layers stay on GPU.
+  # Recommended for precise coding: temp=0.6, top_p=0.95, top_k=20
+  # Thinking: use --reasoning flag to enable (default: disabled)
+  [qwen3_6]="
+    -m $MODELS_DIR/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf
+    --jinja
+    --ctx-size $LLAMA_CTX_SIZE_QWEN3_6
+    --batch-size 512
+    --ubatch-size 128
+    --flash-attn on
+    --cache-type-k q4_0
+    --cache-type-v q4_0
+    --cpu-moe
+    --temperature 0.6
+    --top-p 0.95
+    --top-k 20
+    --min-p 0.0
+    --presence-penalty 0.0
+    --repeat-penalty 1.0
+    --n-gpu-layers auto
+  "
+
+  # Qwen3.6 35B-A3B MoE — Q2_K_XL variant.
+  # Aggressive quantization for higher throughput. Same active param count (~3B),
+  # but roughly half the memory footprint, allowing larger batch/ubatch sizes.
+  # Use when speed matters more than marginal quality (good for autocompletion,
+  # brainstorming, or high-context workloads where memory is the bottleneck).
+  # Quality trade-off: may show slight coherence degradation on long reasoning.
+  [qwen3_6_q2]="
+    -m $MODELS_DIR/Qwen3.6-35B-A3B-UD-Q2_K_XL.gguf
+    --jinja
+    --ctx-size $LLAMA_CTX_SIZE_QWEN3_6
+    --batch-size 1024
+    --ubatch-size 256
+    --flash-attn on
+    --cache-type-k q4_0
+    --cache-type-v q4_0
+    --cpu-moe
+    --temperature 0.6
+    --top-p 0.95
+    --top-k 20
+    --min-p 0.0
+    --presence-penalty 0.0
     --repeat-penalty 1.0
     --n-gpu-layers auto
   "
@@ -425,6 +492,26 @@ declare -A MODEL_ARGS=(
     --n-gpu-layers auto
   "
 
+  # Gemma 4 E4B from ggml-org (Q4_K_M) - alternative source
+  # Same settings as the unsloth IQ4_NL variant
+  # Parameters: Google-recommended temp=1.0, top_p=0.95, top_k=64
+  # Thinking: use --reasoning flag to enable (default: disabled)
+  [gemma4_e4b_ggml]="
+    -m $MODELS_DIR/gemma-4-E4B-it-Q4_K_M.gguf
+    --jinja
+    --ctx-size $LLAMA_CTX_SIZE_LARGE
+    --batch-size 512
+    --ubatch-size 128
+    --flash-attn on
+    --cache-type-k q4_0
+    --cache-type-v q4_0
+    --temperature 1.0
+    --top-p 0.95
+    --top-k 64
+    --min-p 0.0
+    --n-gpu-layers auto
+  "
+
   # GPT-OSS 20B preset (downloads weights automatically)
   # MoE: 20.9B total / 3.6B active params. --cpu-moe keeps expert weights in
   # RAM while attention layers stay on GPU, optimal for 8GB VRAM.
@@ -458,9 +545,12 @@ declare -A MODEL_PORT=(
   [gemma4_e4b]=8084
   [gemma4_e4b_vision]=8084
   [gemma4_e4b_q8]=8084
+  [gemma4_e4b_ggml]=8084
   [nemotron-nano]=8084
   [qwen3_coder_next]=8084
   [glm_4_7_flash]=8084
+  [qwen3_6]=8084
+  [qwen3_6_q2]=8084
 )
 
 # HuggingFace source for auto-download: "owner/repo filename"
@@ -476,13 +566,16 @@ declare -A MODEL_HF=(
   [nemotron-nano]="bartowski/nvidia_Nemotron-3-Nano-30B-A3B-GGUF nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
   [qwen3_coder_next]="unsloth/Qwen3-Coder-Next-GGUF Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
   [glm_4_7_flash]="unsloth/GLM-4.7-Flash-GGUF GLM-4.7-Flash-UD-Q4_K_XL.gguf"
+  [qwen3_6]="unsloth/Qwen3.6-35B-A3B-GGUF Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
+  [qwen3_6_q2]="unsloth/Qwen3.6-35B-A3B-GGUF Qwen3.6-35B-A3B-UD-Q2_K_XL.gguf"
   [gemma4_e4b]="unsloth/gemma-4-E4B-it-GGUF gemma-4-E4B-it-IQ4_NL.gguf"
   [gemma4_e4b_vision]="unsloth/gemma-4-E4B-it-GGUF gemma-4-E4B-it-IQ4_NL.gguf"
   [gemma4_e4b_q8]="unsloth/gemma-4-E4B-it-GGUF gemma-4-E4B-it-Q8_0.gguf"
+  [gemma4_e4b_ggml]="ggml-org/gemma-4-E4B-it-GGUF gemma-4-E4B-it-Q4_K_M.gguf"
 )
 
 # Models that support --chat-template-kwargs for thinking toggle
-REASONING_MODELS=(qwen3 qwen3_5 qwen3_5_u9b qwen3_5_u4b qwen3_5_u2b qwen3_5_u08b gpt-oss nemotron-nano glm_4_7_flash gemma4_e4b gemma4_e4b_vision gemma4_e4b_q8)
+REASONING_MODELS=(qwen3 qwen3_5 qwen3_5_u9b qwen3_5_u4b qwen3_5_u2b qwen3_5_u08b qwen3_6 qwen3_6_q2 gpt-oss nemotron-nano glm_4_7_flash gemma4_e4b gemma4_e4b_vision gemma4_e4b_q8 gemma4_e4b_ggml)
 
 # Local path for each model file
 declare -A MODEL_PATH=(
@@ -496,9 +589,12 @@ declare -A MODEL_PATH=(
   [nemotron-nano]="$MODELS_DIR/nvidia_Nemotron-3-Nano-30B-A3B-Q4_K_M.gguf"
   [qwen3_coder_next]="$MODELS_DIR/Qwen3-Coder-Next-UD-Q4_K_XL.gguf"
   [glm_4_7_flash]="$MODELS_DIR/GLM-4.7-Flash-UD-Q4_K_XL.gguf"
+  [qwen3_6]="$MODELS_DIR/Qwen3.6-35B-A3B-UD-Q4_K_XL.gguf"
+  [qwen3_6_q2]="$MODELS_DIR/Qwen3.6-35B-A3B-UD-Q2_K_XL.gguf"
   [gemma4_e4b]="$MODELS_DIR/gemma-4-E4B-it-IQ4_NL.gguf"
   [gemma4_e4b_vision]="$MODELS_DIR/gemma-4-E4B-it-IQ4_NL.gguf"
   [gemma4_e4b_q8]="$MODELS_DIR/gemma-4-E4B-it-Q8_0.gguf"
+  [gemma4_e4b_ggml]="$MODELS_DIR/gemma-4-E4B-it-Q4_K_M.gguf"
 )
 
 # Draft models for speculative decoding (must share tokenizer with the target)
@@ -527,18 +623,24 @@ declare -A MODEL_DRAFT_PATH=(
 # Format: "owner/repo filename" on HuggingFace
 declare -A MODEL_MM_PROJ_HF=(
   [gemma4_e4b_vision]="unsloth/gemma-4-E4B-it-GGUF mmproj-F16.gguf"
+  [gemma4_e4b_ggml]="ggml-org/gemma-4-E4B-it-GGUF mmproj-gemma-4-E4B-it-Q8_0.gguf"
   [qwen3_5_u9b]="unsloth/Qwen3.5-9B-GGUF mmproj-F16.gguf"
   [qwen3_5_u4b]="unsloth/Qwen3.5-4B-GGUF mmproj-F16.gguf"
   [qwen3_5_u2b]="unsloth/Qwen3.5-2B-GGUF mmproj-F16.gguf"
   [qwen3_5_u08b]="unsloth/Qwen3.5-0.8B-GGUF mmproj-F16.gguf"
+  [qwen3_6]="unsloth/Qwen3.6-35B-A3B-GGUF mmproj-F16.gguf"
+  [qwen3_6_q2]="unsloth/Qwen3.6-35B-A3B-GGUF mmproj-F16.gguf"
 )
 
 declare -A MODEL_MM_PROJ_PATH=(
   [gemma4_e4b_vision]="$MODELS_DIR/mmproj-F16.gguf"
+  [gemma4_e4b_ggml]="$MODELS_DIR/mmproj-gemma-4-E4B-it-Q8_0.gguf"
   [qwen3_5_u9b]="$MODELS_DIR/Qwen3.5-9B-mmproj-F16.gguf"
   [qwen3_5_u4b]="$MODELS_DIR/Qwen3.5-4B-mmproj-F16.gguf"
   [qwen3_5_u2b]="$MODELS_DIR/Qwen3.5-2B-mmproj-F16.gguf"
   [qwen3_5_u08b]="$MODELS_DIR/Qwen3.5-0.8B-mmproj-F16.gguf"
+  [qwen3_6]="$MODELS_DIR/Qwen3.6-35B-A3B-mmproj-F16.gguf"
+  [qwen3_6_q2]="$MODELS_DIR/Qwen3.6-35B-A3B-mmproj-F16.gguf"
 )
 
 # =============================================================================
@@ -611,8 +713,22 @@ ensure_mmproj() {
 
   local repo file
   read -r repo file <<< "${MODEL_MM_PROJ_HF[$model]}"
+
+  # Check if already downloaded with original HF filename
+  local downloaded_path="$(dirname "$mmproj_path")/$file"
+  if [[ -f "$downloaded_path" ]]; then
+    echo "Found mmproj at $downloaded_path, renaming to $(basename "$mmproj_path")..."
+    mv "$downloaded_path" "$mmproj_path"
+    return 0
+  fi
+
   echo "Vision projector not found. Downloading $file from $repo..."
   download_hf "$repo" "$file" "$mmproj_path"
+
+  # Rename from original HF filename to model-specific path
+  if [[ -f "$downloaded_path" && ! -f "$mmproj_path" ]]; then
+    mv "$downloaded_path" "$mmproj_path"
+  fi
 }
 
 # =============================================================================
@@ -787,17 +903,14 @@ Usage:
 Flags:
   --port N            Port (default: 8084)
   --small MODEL       Small model for autocompletion (default: qwen3_5_u08b)
-  --big MODELS        Comma-separated big models (default: qwen3_5_u9b,gemma4_e4b,gemma4_e4b_q8)
+  --big MODELS        Comma-separated big models (default: qwen3_5_u9b,qwen3_6,gemma4_e4b,gemma4_e4b_q8,gemma4_e4b_ggml)
   --reasoning         Enable reasoning for big models (Qwen3 family)
   --no-reasoning      Disable reasoning (default)
+  --vision            Enable vision/multimodal support for models that support it
   --no-autoload       Disable auto-load on request
-  --models-max N      Max models loaded simultaneously (default: 4)
+  --models-max N      Max models loaded simultaneously (default: 2; small + one large)
   --host HOST         Bind address (default: 0.0.0.0)
   --                  Everything after this is passed to llama-server
-
-Available models for router:
-  Small (CPU):  qwen3_5_u08b, qwen3_5_u2b
-  Big (GPU):    qwen3_5_u9b, qwen3_5_u4b, qwen3_5_u2b, gemma4_e4b, gemma4_e4b_q8
 
 Examples:
   llm-server router
@@ -805,7 +918,13 @@ Examples:
   llm-server router --big qwen3_5_u9b,gemma4_e4b
   llm-server router --big qwen3_5_u9b,gemma4_e4b_q8
   llm-server router --big gemma4_e4b_q8
+  llm-server router --big gemma4_e4b_ggml
+  llm-server router --big qwen3_6
+  llm-server router --big qwen3_6 --vision
+  llm-server router --big qwen3_6_q2
+  llm-server router --big qwen3_6_q2 --vision
   llm-server router --reasoning
+  llm-server router --vision
   llm-server router --port 9000
 EOF
 }
@@ -817,6 +936,7 @@ run_router() {
   local big_models="$ROUTER_BIG_MODELS"
   local models_max="$ROUTER_MODELS_MAX"
   local reasoning=0
+  local vision=0
   local autoload=true
   local passthru=()
 
@@ -840,6 +960,8 @@ run_router() {
       ;;
     --reasoning)    reasoning=1;  shift   ;;
     --no-reasoning) reasoning=0;  shift   ;;
+    --vision)       vision=1;     shift   ;;
+    --no-vision)    vision=0;     shift   ;;
     --no-autoload)  autoload=false; shift ;;
     --models-max)
       [[ $# -lt 2 ]] && { echo "Error: --models-max requires a value"; exit 1; }
@@ -852,7 +974,7 @@ run_router() {
   done
 
   local valid_small=(qwen3_5_u08b qwen3_5_u2b)
-  local valid_big=(qwen3_5_u9b qwen3_5_u4b qwen3_5_u2b gemma4_e4b gemma4_e4b_q8)
+  local valid_big=(qwen3_5_u9b qwen3_5_u4b qwen3_5_u2b qwen3_6 qwen3_6_q2 gemma4_e4b gemma4_e4b_q8 gemma4_e4b_ggml)
 
   local is_valid=0
   for m in "${valid_small[@]}"; do
@@ -878,16 +1000,29 @@ run_router() {
   done
 
   echo "Starting router with:"
-  echo "  Small model (CPU): $small_model"
+  echo "  Small model (CPU/RAM): $small_model"
   echo "  Big models (GPU): $big_models"
   echo "  Port: $port"
+  echo "  Max loaded models: $models_max"
+  echo "  Parallel slots: $ROUTER_PARALLEL"
+  echo "  Context: $ROUTER_CTX_SIZE"
   echo "  Reasoning: $([ $reasoning -eq 1 ] && echo 'enabled' || echo 'disabled')"
+  echo "  Vision: $([ $vision -eq 1 ] && echo 'enabled' || echo 'disabled')"
   echo ""
 
   ensure_model "$small_model"
   for bm in "${big_arr[@]}"; do
     ensure_model "$bm"
   done
+
+  # Ensure mmproj files are downloaded if vision is enabled
+  if [[ $vision -eq 1 ]]; then
+    for bm in "${big_arr[@]}"; do
+      if [[ -n "${MODEL_MM_PROJ_PATH[$bm]+x}" ]]; then
+        ensure_mmproj "$bm"
+      fi
+    done
+  fi
 
   for bm in "${big_arr[@]}"; do
     local model_path="${MODEL_PATH[$bm]}"
@@ -910,17 +1045,20 @@ run_router() {
   local tmpfile
   tmpfile=$(mktemp)
 
+  local ubatch_size="$ROUTER_UBATCH_SIZE"
+  [[ $vision -eq 1 ]] && ubatch_size="$ROUTER_UBATCH_SIZE_VISION"
+
   cat > "$tmpfile" << EOF
 version = 1
 
 [*]
-ctx-size = $LLAMA_CTX_SIZE_LARGE
-batch-size = 512
-ubatch-size = 128
+ctx-size = $ROUTER_CTX_SIZE
+batch-size = $ROUTER_BATCH_SIZE
+ubatch-size = $ubatch_size
 flash-attn = on
 cache-type-k = q4_0
 cache-type-v = q4_0
-parallel = 1
+parallel = $ROUTER_PARALLEL
 
 [$small_model]
 model = ${MODEL_PATH[$small_model]}
@@ -937,6 +1075,7 @@ EOF
     local temp="0.6"
     local top_p="0.95"
     local reasoning_arg=""
+    local moe_arg=""
 
     if [[ "$bm" == gemma4* ]]; then
       temp="1.0"
@@ -952,11 +1091,27 @@ EOF
     if [[ $reasoning -eq 1 ]]; then
       if [[ "$bm" == qwen3_5* ]]; then
         reasoning_arg="chat-template-kwargs = {\"enable_thinking\":true}"
+      elif [[ "$bm" == qwen3_6* ]]; then
+        reasoning_arg="chat-template-kwargs = {\"enable_thinking\":true,\"preserve_thinking\":true}"
       fi
     else
       if [[ "$bm" == qwen3_5* ]]; then
         reasoning_arg="chat-template-kwargs = {\"enable_thinking\":false}"
+      elif [[ "$bm" == qwen3_6* ]]; then
+        reasoning_arg="chat-template-kwargs = {\"enable_thinking\":false}"
       fi
+    fi
+
+    case "$bm" in
+      qwen3_6*|qwen3_coder_next|glm_4_7_flash|gpt-oss|nemotron-nano)
+        moe_arg="cpu-moe = true"
+        ;;
+    esac
+
+    # Build mmproj argument if vision is enabled and model has mmproj
+    local mmproj_arg=""
+    if [[ $vision -eq 1 && -n "${MODEL_MM_PROJ_PATH[$bm]+x}" ]]; then
+      mmproj_arg="mmproj = ${MODEL_MM_PROJ_PATH[$bm]}"
     fi
 
     cat >> "$tmpfile" << EOF
@@ -966,6 +1121,8 @@ n-gpu-layers = $n_gpu
 temperature = $temp
 top-p = $top_p
 $reasoning_arg
+$moe_arg
+$mmproj_arg
 
 EOF
   done
@@ -980,7 +1137,7 @@ EOF
     --threads "$LLAMA_THREADS" \
     --threads-batch "$LLAMA_THREADS_BATCH" \
     --threads-http "$LLAMA_THREADS_HTTP" \
-    --parallel "$LLAMA_PARALLEL" \
+    --parallel "$ROUTER_PARALLEL" \
     --host "$host" \
     --port "$port" \
     --models-preset "$tmpfile" \
@@ -1137,8 +1294,18 @@ THREADS_HTTP=4
 # Number of parallel inference slots
 PARALLEL=2
 
+# Router-specific low-VRAM defaults
+ROUTER_PARALLEL=1
+ROUTER_CTX_SIZE=32768
+ROUTER_BATCH_SIZE=256
+ROUTER_UBATCH_SIZE=64
+ROUTER_UBATCH_SIZE_VISION=256
+
 # Qwen3.5 Unsloth presets context window (for coding agents / tools)
 CTX_SIZE_QWEN3_5=262144
+
+# Qwen3.6 MoE context window. 32K is safer for desktop use on 8GB VRAM.
+CTX_SIZE_QWEN3_6=32768
 
 # ============================================================================
 # Benchmark Settings
@@ -1200,6 +1367,15 @@ show_profile() {
   echo "  CTX_SIZE_LARGE:     $LLAMA_CTX_SIZE_LARGE"
   echo "  CTX_SIZE_SMALL:     $LLAMA_CTX_SIZE_SMALL"
   echo "  CTX_SIZE_QWEN3_5:   $LLAMA_CTX_SIZE_QWEN3_5"
+  echo "  CTX_SIZE_QWEN3_6:   $LLAMA_CTX_SIZE_QWEN3_6"
+  echo ""
+  echo "Router defaults"
+  echo "  ROUTER_MODELS_MAX:  $ROUTER_MODELS_MAX"
+  echo "  ROUTER_PARALLEL:    $ROUTER_PARALLEL"
+  echo "  ROUTER_CTX_SIZE:    $ROUTER_CTX_SIZE"
+  echo "  ROUTER_BATCH_SIZE:  $ROUTER_BATCH_SIZE"
+  echo "  ROUTER_UBATCH_SIZE: $ROUTER_UBATCH_SIZE"
+  echo "  ROUTER_UBATCH_SIZE_VISION: $ROUTER_UBATCH_SIZE_VISION"
   echo ""
 
   if [[ -n "$model" ]]; then
@@ -1226,7 +1402,7 @@ Usage:
   llm-server router [flags]
   llm-server <model> [flags] [-- extra llama-server args...]
 
-Models: qwen2_5-coder | qwen3 | qwen3_5 | qwen3_5_u9b | qwen3_5_u4b | qwen3_5_u2b | qwen3_5_u08b | gpt-oss | nemotron-nano | qwen3_coder_next | glm_4_7_flash | gemma4_e4b | gemma4_e4b_q8 | gemma4_e4b_vision
+Models: qwen2_5-coder | qwen3 | qwen3_5 | qwen3_5_u9b | qwen3_5_u4b | qwen3_5_u2b | qwen3_5_u08b | qwen3_6 | qwen3_6_q2 | gpt-oss | nemotron-nano | qwen3_coder_next | glm_4_7_flash | gemma4_e4b | gemma4_e4b_q8 | gemma4_e4b_vision | gemma4_e4b_ggml
 
 Commands:
   setup               clone/update llama.cpp and build with CUDA (RTX 3070 Ti + 5700X)
@@ -1237,15 +1413,16 @@ Commands:
 Router Flags:
   --port N            Port (default: 8084)
   --small MODEL      Small model for autocompletion (default: qwen3_5_u08b)
-  --big MODELS       Comma-separated big models (default: qwen3_5_u9b,gemma4_e4b,gemma4_e4b_q8)
+  --big MODELS       Comma-separated big models (default: qwen3_5_u9b,qwen3_6,gemma4_e4b,gemma4_e4b_q8,gemma4_e4b_ggml)
   --reasoning        Enable reasoning for big models (Qwen3 family)
   --no-reasoning     Disable reasoning (default)
+  --vision           Enable vision/multimodal support for models that support it
   --no-autoload      Disable auto-load on request
-  --models-max N     Max models loaded simultaneously (default: 4)
+  --models-max N     Max models loaded simultaneously (default: 2; small + one large)
 
 Valid router models:
   Small (CPU):  qwen3_5_u08b, qwen3_5_u2b
-  Big (GPU):    qwen3_5_u9b, qwen3_5_u4b, qwen3_5_u2b, gemma4_e4b, gemma4_e4b_q8
+  Big (GPU):    qwen3_5_u9b, qwen3_5_u4b, qwen3_5_u2b, qwen3_6, qwen3_6_q2, gemma4_e4b, gemma4_e4b_q8, gemma4_e4b_ggml
 
 Flags:
   --reasoning         enable reasoning/thinking mode (Qwen3 family only)
@@ -1266,7 +1443,10 @@ Configuration:
 Env overrides (5700X defaults):
   LLAMA_THREADS=8       LLAMA_THREADS_BATCH=12
   LLAMA_THREADS_HTTP=4  LLAMA_PARALLEL=2
+  ROUTER_PARALLEL=1     ROUTER_CTX_SIZE=32768
+  ROUTER_BATCH_SIZE=256 ROUTER_UBATCH_SIZE=64
   LLAMA_CTX_SIZE_QWEN3_5=262144
+  LLAMA_CTX_SIZE_QWEN3_6=32768
   LLAMA_DIR=$HOME/applications/llama.cpp
   BENCH_REQUESTS=10     BENCH_N_PREDICT=256
 
@@ -1280,7 +1460,13 @@ Examples:
   llm-server router --big qwen3_5_u9b,gemma4_e4b
   llm-server router --big qwen3_5_u9b,gemma4_e4b_q8
   llm-server router --big gemma4_e4b_q8
+  llm-server router --big gemma4_e4b_ggml
+  llm-server router --big qwen3_6
+  llm-server router --big qwen3_6 --vision
+  llm-server router --big qwen3_6_q2
+  llm-server router --big qwen3_6_q2 --vision
   llm-server router --reasoning
+  llm-server router --vision
   llm-server router --port 9000
   llm-server qwen3
   llm-server qwen3 --draft
@@ -1289,10 +1475,15 @@ Examples:
   llm-server qwen3_5_u4b
   llm-server qwen3_5_u2b
   llm-server qwen3_5_u08b
+  llm-server qwen3_6
+  llm-server qwen3_6 --vision
+  llm-server qwen3_6_q2
+  llm-server qwen3_6_q2 --vision
   llm-server qwen2_5-coder --port 9000
   llm-server qwen3_coder_next
   llm-server gemma4_e4b
   llm-server gemma4_e4b_q8
+  llm-server gemma4_e4b_ggml
   llm-server gemma4_e4b_vision
   llm-server glm_4_7_flash --reasoning
   llm-server gemma4_e4b_vision --vision
@@ -1389,6 +1580,12 @@ if printf '%s\n' "${REASONING_MODELS[@]}" | grep -qx "$MODEL"; then
     # Qwen3.5 and Gemma 4 use chat-template-kwargs
     if [[ ${REASONING:-0} -eq 1 ]]; then
       REASONING_ARGS=(--chat-template-kwargs '{"enable_thinking":true}')
+    else
+      REASONING_ARGS=(--chat-template-kwargs '{"enable_thinking":false}')
+    fi
+  elif [[ "$MODEL" == qwen3_6 ]]; then
+    if [[ ${REASONING:-0} -eq 1 ]]; then
+      REASONING_ARGS=(--chat-template-kwargs '{"enable_thinking":true,"preserve_thinking":true}')
     else
       REASONING_ARGS=(--chat-template-kwargs '{"enable_thinking":false}')
     fi

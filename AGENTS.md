@@ -15,13 +15,17 @@ Use this guide as the default operating contract for coding agents.
 - Config sources: `config-files/` and `user-files/`
 - Script groups: `packages/`, `installers/`, `apps/`, `utils/`, `scripts/`
 
-## Cursor and Copilot Rules
+**Notable Scripts:**
+- `scripts/llm-server` - Local LLM server launcher (llama.cpp wrapper with model registry, router mode, benchmark)
 
-Checked paths:
+## Additional Instruction Sources
+
+Checked paths (higher priority first):
 
 - `.cursorrules`: not present
 - `.cursor/rules/`: not present
 - `.github/copilot-instructions.md`: not present
+- `.opencode/agent/anti-slop.md`: present - contains AI slop cleanup guidelines
 
 If any of these files are added later, treat them as higher-priority local instructions.
 

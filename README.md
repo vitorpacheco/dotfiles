@@ -138,7 +138,8 @@ Preview changes without applying:
 │   ├── gitconfig
 │   └── tmux.conf
 ├── scripts/             # Utility scripts
-│   └── tmux-sessionizer # Tmux workspace selector
+│   ├── tmux-sessionizer # Tmux workspace selector
+│   └── llm-server       # Local LLM server (llama.cpp wrapper with model registry, router, benchmark)
 ├── docs/                # Extra workflow documentation
 │   └── git-alias-workflow.md
 ├── gnome/               # GNOME desktop settings (Linux)
@@ -149,6 +150,34 @@ Preview changes without applying:
 ## 📚 Documentation
 
 - Git aliases and worktree flow: `docs/git-alias-workflow.md`
+
+## 🤖 LLM Server
+
+Local LLM server powered by llama.cpp with automatic model management:
+
+```bash
+# Setup llama.cpp (clone, build with CUDA/Metal)
+llm-server setup
+
+# Start a specific model
+llm-server qwen3_5_u9b
+llm-server qwen3_6
+llm-server qwen3_6 --vision
+llm-server gemma4_e4b_ggml
+
+# Start router mode (small CPU + big GPU models)
+llm-server router
+llm-server router --vision              # Enable vision/multimodal
+llm-server router --big qwen3_6         # Use Qwen3.6 35B-A3B
+llm-server router --big gemma4_e4b_ggml # Use specific big model
+
+# Benchmark a model
+llm-server benchmark qwen3_5_u9b
+```
+
+**Available models:** qwen3_5_u9b, qwen3_5_u4b, qwen3_5_u2b, qwen3_5_u08b, qwen3_6, gemma4_e4b, gemma4_e4b_q8, gemma4_e4b_ggml, nemotron-nano, qwen3_coder_next, glm_4_7_flash
+
+**Router mode:** Runs multiple models simultaneously with API-based routing—small model on CPU for fast autocompletion, big models on GPU for complex tasks. Ideal for IDE integrations like Continue.
 
 ## 🔧 What's Installed
 
