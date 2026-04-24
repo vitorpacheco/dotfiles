@@ -114,7 +114,7 @@ yabai -m rule --add app="^Digital Colou?r Meter$" sticky=on
 yabai -m rule --add title="^Picture in Picture$" sticky=on manage=off
 
 # Raycast / Bitwarden
-yabai -m rule --add app="^Raycast$" title="^Raycast Settings$" manage=off
+yabai -m rule --add app="^Raycast$" title="^Settings$" manage=off
 yabai -m rule --add app="^Bitwarden$" manage=off
 yabai -m rule --add app="^Bitwarden$" title="Extension:" manage=off
 yabai -m rule --add app="^Zen$" title="Bitwarden$" manage=off
