@@ -535,7 +535,7 @@ execute_utils() {
 
 execute_omarchy_installers() {
 	log_info "Executing Omarchy installer scripts..."
-	local selected=("00-zsh.sh" "01-tmux.sh" "02-oh-my-zsh.sh" "07-git.sh" "08-setup-dirs.sh")
+	local selected=("00-zsh.sh" "01-tmux.sh" "03-homebrew.sh" "02-oh-my-zsh.sh" "07-git.sh" "08-setup-dirs.sh" "09-voxtype.sh")
 	for script_name in "${selected[@]}"; do
 		local script="$DOTFILES_DIR/installers/$script_name"
 		if [[ -f "$script" ]]; then
