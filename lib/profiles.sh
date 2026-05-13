@@ -20,6 +20,7 @@ INSTALL_ICONS=false
 INSTALL_INSTALLERS=false
 INSTALL_PACKAGES=false
 INSTALL_LOCAL_SCRIPTS=false
+INSTALL_OMARCHY_INSTALLERS=false
 INSTALL_OMARCHY_OVERRIDES=false
 INSTALL_KOOL_OVERRIDES=false
 INSTALL_MACOS_CONFIGS=false
@@ -124,6 +125,8 @@ apply_profile() {
 	omarchy)
 		log_info "Using omarchy profile - installing overrides and configs"
 		INSTALL_CONFIG=true
+		INSTALL_USER_CONFIG=true
+		INSTALL_OMARCHY_INSTALLERS=true
 		INSTALL_OMARCHY_OVERRIDES=true
 		INSTALL_LOCAL_SCRIPTS=true
 		;;
@@ -199,6 +202,10 @@ run_installation() {
 
 	if [[ "$INSTALL_LOCAL_SCRIPTS" == true ]]; then
 		copy_local_scripts
+	fi
+
+	if [[ "$INSTALL_OMARCHY_INSTALLERS" == true ]]; then
+		execute_omarchy_installers
 	fi
 
 	if [[ "$INSTALL_OMARCHY_OVERRIDES" == true ]]; then

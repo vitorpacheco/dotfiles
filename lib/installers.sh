@@ -457,6 +457,31 @@ install_hyprland_plugins() {
 		return 0
 	fi
 
+	# Install hyprpm build dependencies before updating headers
+	log_info "Installing hyprpm build dependencies..."
+	local pkg_mgr
+	pkg_mgr=$(get_package_manager)
+	local deps=("cmake" "cpio" "git" "gcc")
+	if [[ "$pkg_mgr" == "yay" || "$pkg_mgr" == "pacman" ]]; then
+		deps+=("pkgconf")
+	else
+		deps+=("pkg-config" "g++")
+	fi
+	for dep in "${deps[@]}"; do
+		install_package "$dep" || log_warn "Failed to install dependency: $dep"
+	done
+
+	# Always update headers first to avoid "Headers outdated" errors
+	log_info "Updating hyprpm headers..."
+	local hyprpm_out
+	hyprpm_out=$(hyprpm update 2>&1)
+	echo "$hyprpm_out"
+	if echo "$hyprpm_out" | grep -q "Could not update"; then
+		log_error "Failed to update hyprpm headers — check dependencies above"
+		return 1
+	fi
+	log_success "hyprpm headers updated"
+
 	# Add the hyprland-plugins repository if not already added
 	if ! hyprpm list | grep -q "hyprland-plugins"; then
 		log_info "Adding hyprland-plugins repository..."
@@ -465,13 +490,6 @@ install_hyprland_plugins() {
 			return 1
 		}
 		log_success "Added hyprland-plugins repository"
-
-		log_info "Updating hyprpm repository..."
-		hyprpm update -q || {
-			log_error "Failed to update hyprpm repository"
-			return 1
-		}
-		log_success "Updated hyprpm repository"
 	else
 		log_info "hyprland-plugins repository already added"
 	fi
@@ -511,6 +529,24 @@ execute_utils() {
 			fi
 		else
 			log_error "Utility script not found: $i"
+		fi
+	done
+}
+
+execute_omarchy_installers() {
+	log_info "Executing Omarchy installer scripts..."
+	local selected=("00-zsh.sh" "01-tmux.sh" "02-oh-my-zsh.sh" "07-git.sh" "08-setup-dirs.sh")
+	for script_name in "${selected[@]}"; do
+		local script="$DOTFILES_DIR/installers/$script_name"
+		if [[ -f "$script" ]]; then
+			if [[ "$DRY_RUN" == true ]]; then
+				log_info "[DRY-RUN] Would execute: $script_name"
+			else
+				log_info "Executing $script_name..."
+				bash "$script" || log_error "Failed to execute $script_name"
+			fi
+		else
+			log_warn "Installer not found: $script_name"
 		fi
 	done
 }

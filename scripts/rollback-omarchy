@@ -1,0 +1,203 @@
+#!/usr/bin/env bash
+#
+# Rollback script for --profile=omarchy installation.
+# Removes symlinks created by the omarchy profile and restores pre-install backups.
+# Only removes symlinks that point to this dotfiles repo — safe to run at any time.
+#
+
+set -euo pipefail
+
+# Resolve the real script path so this works when invoked via ~/.local/scripts symlink
+REAL_SCRIPT="$(realpath "${BASH_SOURCE[0]}")"
+SCRIPT_DIR="$(cd "$(dirname "$REAL_SCRIPT")" && pwd)"
+DOTFILES_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+source "$DOTFILES_DIR/packages/lib.sh"
+
+DRY_RUN=false
+for arg in "$@"; do
+	case "$arg" in
+	--dry-run) DRY_RUN=true ;;
+	--help)
+		echo "Usage: $(basename "$0") [--dry-run]"
+		echo "Reverts the omarchy profile installation from $DOTFILES_DIR"
+		exit 0
+		;;
+	*) log_error "Unknown argument: $arg"; exit 1 ;;
+	esac
+done
+
+[[ "$DRY_RUN" == true ]] && log_info "Dry-run mode — no changes will be made"
+
+CONFIG_DIR="$HOME/.config"
+LOCAL_SCRIPTS_DIR="$HOME/.local/scripts"
+
+# --- Helpers ---
+
+# Backup any real (non-symlink) file using the install naming convention
+backup_current() {
+	local path="$1"
+	if [[ -e "$path" ]] && [[ ! -L "$path" ]]; then
+		local dir base backup
+		dir="$(dirname "$path")"
+		base="$(basename "$path")"
+		backup="$dir/_${base}.backup"
+		local n=1
+		while [[ -e "$backup" ]]; do
+			backup="$dir/_${base}.backup.$n"
+			n=$((n + 1))
+		done
+		if [[ "$DRY_RUN" == true ]]; then
+			log_info "[DRY-RUN] Would backup: $(basename "$path") -> $(basename "$backup")"
+		else
+			mv "$path" "$backup"
+			log_info "Backed up: $(basename "$path") -> $(basename "$backup")"
+		fi
+	fi
+}
+
+# Return the most recent install-time backup for a path, or empty string if none found.
+# The install script creates _<base>.backup first, then _<base>.backup.1, .backup.2, …
+# Higher number = more recent, so we return the highest existing one.
+find_install_backup() {
+	local path="$1"
+	local dir base
+	dir="$(dirname "$path")"
+	base="$(basename "$path")"
+
+	local i=1 last=""
+	while [[ -e "$dir/_${base}.backup.$i" ]]; do
+		last="$dir/_${base}.backup.$i"
+		i=$((i + 1))
+	done
+	[[ -n "$last" ]] && { echo "$last"; return; }
+
+	[[ -e "$dir/_${base}.backup" ]] && { echo "$dir/_${base}.backup"; return; }
+
+	echo ""
+}
+
+# Remove a symlink pointing to this dotfiles repo and restore its install-time backup.
+rollback_symlink() {
+	local path="$1"
+
+	if [[ ! -L "$path" ]]; then
+		[[ -e "$path" ]] \
+			&& log_info "Skipping (not a symlink): $path" \
+			|| log_info "Skipping (not found): $path"
+		return 0
+	fi
+
+	local target
+	target="$(readlink "$path")"
+	if [[ "$target" != "$DOTFILES_DIR"* ]]; then
+		log_info "Skipping (not a dotfiles symlink): $path"
+		return 0
+	fi
+
+	local backup
+	backup="$(find_install_backup "$path")"
+
+	if [[ "$DRY_RUN" == true ]]; then
+		if [[ -n "$backup" ]]; then
+			log_info "[DRY-RUN] Would remove symlink, restore backup: $(basename "$path") <- $(basename "$backup")"
+		else
+			log_info "[DRY-RUN] Would remove symlink (no backup): $path"
+		fi
+		return 0
+	fi
+
+	rm "$path"
+	if [[ -n "$backup" ]]; then
+		mv "$backup" "$path"
+		log_success "Restored: $(basename "$path")"
+	else
+		log_success "Removed symlink: $path"
+	fi
+}
+
+# Remove lines injected into a system config file.
+# Backs up the file to <file>.rollback-bak before modifying.
+remove_injected_lines() {
+	local file="$1"
+	local comment_pattern="$2"  # exact comment line text (no regex)
+	local content_pattern="$3"  # string uniquely identifying the injected content line
+
+	if [[ ! -f "$file" ]]; then
+		log_info "Skipping (not found): $file"
+		return 0
+	fi
+
+	if ! grep -qF "$content_pattern" "$file" 2>/dev/null; then
+		log_info "Already clean: $(basename "$file")"
+		return 0
+	fi
+
+	if [[ "$DRY_RUN" == true ]]; then
+		log_info "[DRY-RUN] Would remove injected lines from: $file"
+		return 0
+	fi
+
+	# Backup before modifying
+	cp "$file" "${file}.rollback-bak"
+	log_info "Backed up: $file -> ${file}.rollback-bak"
+
+	# Remove comment line and content line (leave any surrounding blank lines)
+	sed -i "/^# ${comment_pattern}$/d" "$file"
+	sed -i "/${content_pattern}/d" "$file"
+
+	log_success "Removed injected lines from: $(basename "$file")"
+}
+
+# --- Config file symlinks (INSTALL_CONFIG) ---
+
+log_info "Rolling back config file symlinks..."
+
+for app in bat eza fzf helix homebrew kbd lazydocker lazygit mise nvim personal \
+	skhd tmux-sessionizer user-dirs.dirs Vial vpnc wireplumber xcompose yabai zsh; do
+	rollback_symlink "$CONFIG_DIR/$app"
+done
+
+# --- User file symlinks (INSTALL_USER_CONFIG) ---
+
+log_info "Rolling back user file symlinks..."
+
+for name in zshrc zprofile bashrc bash_profile profile vimrc; do
+	rollback_symlink "$HOME/.$name"
+done
+
+# --- Local scripts symlink (INSTALL_LOCAL_SCRIPTS) ---
+
+log_info "Rolling back local scripts symlink..."
+rollback_symlink "$LOCAL_SCRIPTS_DIR"
+
+# --- Omarchy override symlinks (INSTALL_OMARCHY_OVERRIDES) ---
+
+log_info "Rolling back omarchy override symlinks..."
+
+rollback_symlink "$CONFIG_DIR/tmux/omarchy-overrides.conf"
+rollback_symlink "$CONFIG_DIR/hypr/omarchy-overrides.conf"
+rollback_symlink "$CONFIG_DIR/hypr/machine.conf"
+rollback_symlink "$CONFIG_DIR/omarchy/xcompose-overrides.conf"
+
+# --- Injected lines in system config files ---
+
+log_info "Removing injected lines from system config files..."
+
+remove_injected_lines \
+	"$CONFIG_DIR/tmux/tmux.conf" \
+	"Source Omarchy overrides" \
+	"omarchy-overrides.conf"
+
+remove_injected_lines \
+	"$CONFIG_DIR/hypr/hyprland.conf" \
+	"Source Omarchy overrides" \
+	"omarchy-overrides.conf"
+
+remove_injected_lines \
+	"$HOME/.XCompose" \
+	"Include custom overrides from dotfiles" \
+	"xcompose-overrides.conf"
+
+log_success "Omarchy rollback complete."
+
+# vi: ft=bash
