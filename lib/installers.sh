@@ -32,7 +32,7 @@ install_config_files() {
 	mkdir -p "$CONFIG_DIR"
 
 	# Configs to skip when running on Omarchy (to preserve Omarchy's system configs)
-	local omarchy_excluded_configs=("btop" "kitty" "ghostty" "hypr" "tmux")
+	local omarchy_excluded_configs=("btop" "kitty" "ghostty" "hypr" "tmux" "iwd")
 
 	for file in "$DOTFILES_DIR/config-files"/*; do
 		if [[ -e "$file" ]]; then
@@ -535,7 +535,7 @@ execute_utils() {
 
 execute_omarchy_installers() {
 	log_info "Executing Omarchy installer scripts..."
-	local selected=("00-zsh.sh" "01-tmux.sh" "03-homebrew.sh" "02-oh-my-zsh.sh" "07-git.sh" "08-setup-dirs.sh" "09-voxtype.sh")
+	local selected=("00-zsh.sh" "01-tmux.sh" "03-homebrew.sh" "02-oh-my-zsh.sh" "07-git.sh" "08-setup-dirs.sh" "09-voxtype.sh" "10-wifi-5ghz.sh")
 	for script_name in "${selected[@]}"; do
 		local script="$DOTFILES_DIR/installers/$script_name"
 		if [[ -f "$script" ]]; then
