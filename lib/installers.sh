@@ -535,7 +535,25 @@ execute_utils() {
 
 execute_omarchy_installers() {
 	log_info "Executing Omarchy installer scripts..."
-	local selected=("00-zsh.sh" "01-tmux.sh" "03-homebrew.sh" "02-oh-my-zsh.sh" "07-git.sh" "08-setup-dirs.sh" "09-voxtype.sh" "10-wifi-5ghz.sh")
+	local selected=("00-zsh.sh" "01-tmux.sh" "03-homebrew.sh" "02-oh-my-zsh.sh" "07-git.sh" "08-setup-dirs.sh" "09-voxtype.sh" "10-wifi-5ghz.sh" "11-nfs.sh")
+	for script_name in "${selected[@]}"; do
+		local script="$DOTFILES_DIR/installers/$script_name"
+		if [[ -f "$script" ]]; then
+			if [[ "$DRY_RUN" == true ]]; then
+				log_info "[DRY-RUN] Would execute: $script_name"
+			else
+				log_info "Executing $script_name..."
+				bash "$script" || log_error "Failed to execute $script_name"
+			fi
+		else
+			log_warn "Installer not found: $script_name"
+		fi
+	done
+}
+
+execute_kool_installers() {
+	log_info "Executing Kool installer scripts..."
+	local selected=("00-zsh.sh" "01-tmux.sh" "03-homebrew.sh" "02-oh-my-zsh.sh" "07-git.sh" "08-setup-dirs.sh" "11-nfs.sh")
 	for script_name in "${selected[@]}"; do
 		local script="$DOTFILES_DIR/installers/$script_name"
 		if [[ -f "$script" ]]; then

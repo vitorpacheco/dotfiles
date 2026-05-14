@@ -22,6 +22,7 @@ INSTALL_PACKAGES=false
 INSTALL_LOCAL_SCRIPTS=false
 INSTALL_OMARCHY_INSTALLERS=false
 INSTALL_OMARCHY_OVERRIDES=false
+INSTALL_KOOL_INSTALLERS=false
 INSTALL_KOOL_OVERRIDES=false
 INSTALL_MACOS_CONFIGS=false
 CHECK_HEALTH=false
@@ -133,6 +134,7 @@ apply_profile() {
 	kool)
 		log_info "Using kool profile - installing Kool Hyprland overrides and configs"
 		INSTALL_CONFIG=true
+		INSTALL_KOOL_INSTALLERS=true
 		INSTALL_KOOL_OVERRIDES=true
 		INSTALL_LOCAL_SCRIPTS=true
 		;;
@@ -210,6 +212,10 @@ run_installation() {
 
 	if [[ "$INSTALL_OMARCHY_OVERRIDES" == true ]]; then
 		install_omarchy_overrides
+	fi
+
+	if [[ "$INSTALL_KOOL_INSTALLERS" == true ]]; then
+		execute_kool_installers
 	fi
 
 	if [[ "$INSTALL_KOOL_OVERRIDES" == true ]]; then

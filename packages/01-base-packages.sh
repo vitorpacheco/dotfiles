@@ -42,6 +42,7 @@ declare -A UBUNTU_PACKAGES=(
 	["rofi"]="launcher"
 	["plocate"]="file locator"
 	["nfs-common"]="NFS client"
+	["nfs-kernel-server"]="NFS server"
 )
 
 declare -A ARCH_PACKAGES=(
