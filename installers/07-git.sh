@@ -7,6 +7,15 @@ source "${SCRIPT_DIR}/../packages/lib.sh"
 
 log_info "[GIT] Configurando Git com delta e nvimdiff..."
 
+# Install git-delta if not already present
+if ! command -v delta &>/dev/null; then
+	log_info "Installing git-delta..."
+	install_package git-delta
+	log_success "git-delta installed"
+else
+	log_info "git-delta already installed"
+fi
+
 # Configurações básicas do Git
 git config --global core.editor "nvim"
 git config --global core.pager "delta"
