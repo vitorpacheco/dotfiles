@@ -46,6 +46,7 @@ declare -A UBUNTU_PACKAGES=(
 )
 
 declare -A ARCH_PACKAGES=(
+	["speech-dispatcher"]="text-to-speech interface"
 	["base-devel"]="build tools"
 	["procps-ng"]="process utilities"
 	["file"]="file command"
