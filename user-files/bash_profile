@@ -8,3 +8,6 @@
 export PATH="$PATH:/home/vitor/.lmstudio/bin"
 # End of LM Studio CLI section
 
+
+. "$HOME/.local/share/../bin/env"
+. "$HOME/.cargo/env"

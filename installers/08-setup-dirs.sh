@@ -65,6 +65,20 @@ for old in "${!RENAMES[@]}"; do
 	fi
 done
 
+# --- Remove old uppercase directories if empty ---
+
+for old in "${!RENAMES[@]}"; do
+	old_path="$HOME/$old"
+	if [[ -d "$old_path" ]] && [[ -z "$(ls -A "$old_path")" ]]; then
+		if [[ "$DRY_RUN" == true ]]; then
+			log_info "[DRY-RUN] Would remove empty dir: ~/$old"
+		else
+			rmdir "$old_path"
+			log_success "Removed empty dir: ~/$old"
+		fi
+	fi
+done
+
 # --- Create missing directories ---
 
 for dir in "${CREATE_IF_MISSING[@]}"; do
@@ -83,9 +97,9 @@ done
 
 if command -v xdg-user-dirs-update >/dev/null 2>&1; then
 	if [[ "$DRY_RUN" == true ]]; then
-		log_info "[DRY-RUN] Would run: xdg-user-dirs-update --force"
+		log_info "[DRY-RUN] Would run: xdg-user-dirs-update"
 	else
-		xdg-user-dirs-update --force
+		xdg-user-dirs-update
 		log_success "Applied xdg-user-dirs config"
 	fi
 else

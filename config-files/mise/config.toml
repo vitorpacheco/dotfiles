@@ -1,27 +1,16 @@
 [tools]
-bun = "1.2"
-deno = "2.3"
-dotnet = "latest"
-flyway = "11.8"
+bun = "latest"
+deno = "latest"
 go = "latest"
-golangci-lint = "2.1"
-gradle = "latest"
-java = "zulu-25"
+java = "latest"
 julia = "latest"
-kotlin = "2.1"
-maven = "latest"
 node = "latest"
-python = "3"
-quarkus = "latest"
-ruby = "3.4"
-rust = "1.86"
-spring-boot = "latest"
-zig = "0.14"
-php = "8.4"
-ruff = "latest"
+python = "latest"
+rust = "1.95"
 
 [settings]
 idiomatic_version_file_enable_tools = ["node", "ruby"]
+fetch_remote_versions_timeout = "60s"
 
 [settings.ruby]
-ruby_build_opts = "CC=gcc-14 CXX=g++-14"
+ruby_build_opts = "CC=gcc CXX=g++"

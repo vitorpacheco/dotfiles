@@ -53,8 +53,10 @@ export PATH=$PATH:$HOME/.lmstudio/bin
 
 export PATH=$PATH:$HOME/.local/share/JetBrains/Toolbox/scripts
 
-. "$HOME/.cargo/env"
+[[ -f "$HOME/.cargo/env" ]] && . "$HOME/.cargo/env"
 
 if [[ -f "$HOME/.profile-overrides" ]]; then
     . "$HOME/.profile-overrides"
 fi
+
+. "$HOME/.local/share/../bin/env"

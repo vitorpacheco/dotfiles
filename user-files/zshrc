@@ -1,2 +1,4 @@
 source ~/.config/zsh/rc
 
+
+. "$HOME/.local/share/../bin/env"
