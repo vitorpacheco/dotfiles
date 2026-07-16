@@ -46,6 +46,7 @@
 #   ROUTER_CTX_SIZE=32768   router context window
 #   LLAMA_CTX_SIZE_QWEN3_5=262144  context for Qwen3.5 Unsloth presets
 #   LLAMA_CTX_SIZE_QWEN3_6=32768   context for Qwen3.6 on donan
+#   LLAMA_CTX_SIZE_QWEN3_6_Q2=262144  context for Qwen3.6 Q2_K_XL (high-context coding)
 #   LLAMA_DIR               path to the llama.cpp checkout
 #   LLAMA_SERVER            override the llama-server binary path
 #
@@ -91,6 +92,7 @@ DEFAULT_CTX_SIZE_LARGE="65536"
 DEFAULT_CTX_SIZE_SMALL="16384"
 DEFAULT_CTX_SIZE_QWEN3_5="262144"
 DEFAULT_CTX_SIZE_QWEN3_6="262144"
+DEFAULT_CTX_SIZE_QWEN3_6_Q2="262144"
 DEFAULT_BENCH_REQUESTS="10"
 DEFAULT_BENCH_N_PREDICT="256"
 DEFAULT_API_KEY=""
@@ -144,8 +146,9 @@ LLAMA_PARALLEL="${LLAMA_PARALLEL:-${PARALLEL:-$DEFAULT_PARALLEL}}"
 LLAMA_CTX_SIZE_LARGE="${LLAMA_CTX_SIZE_LARGE:-${CTX_SIZE_LARGE:-$DEFAULT_CTX_SIZE_LARGE}}"
 LLAMA_CTX_SIZE_SMALL="${LLAMA_CTX_SIZE_SMALL:-${CTX_SIZE_SMALL:-$DEFAULT_CTX_SIZE_SMALL}}"
 LLAMA_CTX_SIZE_QWEN3_5="${LLAMA_CTX_SIZE_QWEN3_5:-${CTX_SIZE_QWEN3_5:-$DEFAULT_CTX_SIZE_QWEN3_5}}"
-LLAMA_CTX_SIZE_QWEN3_6="${LLAMA_CTX_SIZE_QWEN3_6:-${CTX_SIZE_QWEN3_6:-$DEFAULT_CTX_SIZE_QWEN3_6}}"
-BENCH_REQUESTS="${BENCH_REQUESTS:-${BENCH_REQUESTS_CONF:-$DEFAULT_BENCH_REQUESTS}}"
+  LLAMA_CTX_SIZE_QWEN3_6="${LLAMA_CTX_SIZE_QWEN3_6:-${CTX_SIZE_QWEN3_6:-$DEFAULT_CTX_SIZE_QWEN3_6}}"
+  LLAMA_CTX_SIZE_QWEN3_6_Q2="${LLAMA_CTX_SIZE_QWEN3_6_Q2:-${CTX_SIZE_QWEN3_6_Q2:-$DEFAULT_CTX_SIZE_QWEN3_6_Q2}}"
+  BENCH_REQUESTS="${BENCH_REQUESTS:-${BENCH_REQUESTS_CONF:-$DEFAULT_BENCH_REQUESTS}}"
 BENCH_N_PREDICT="${BENCH_N_PREDICT:-${BENCH_N_PREDICT_CONF:-$DEFAULT_BENCH_N_PREDICT}}"
 LLAMA_API_KEY="${LLAMA_API_KEY:-${API_KEY:-$DEFAULT_API_KEY}}"
 
@@ -397,7 +400,7 @@ declare -A MODEL_ARGS=(
   [qwen3_6_q2]="
     -m $MODELS_DIR/Qwen3.6-35B-A3B-UD-Q2_K_XL.gguf
     --jinja
-    --ctx-size $LLAMA_CTX_SIZE_QWEN3_6
+    --ctx-size $LLAMA_CTX_SIZE_QWEN3_6_Q2
     --batch-size 1024
     --ubatch-size 256
     --flash-attn on
@@ -667,7 +670,7 @@ ensure_model() {
 
   local repo file
   read -r repo file <<< "${MODEL_HF[$model]}"
-  
+
   # Check if file looks like a shorthand quant (e.g., "Q8_0") or full filename
   if [[ "$file" =~ ^[A-Z0-9_]+$ ]]; then
     # It's a shorthand quant - llama-server -hf can handle this directly
@@ -1114,6 +1117,15 @@ EOF
       mmproj_arg="mmproj = ${MODEL_MM_PROJ_PATH[$bm]}"
     fi
 
+    local ctx_size_arg=""
+    local image_min_tokens_arg=""
+    if [[ "$bm" == "qwen3_6_q2" ]]; then
+      ctx_size_arg="ctx-size = $LLAMA_CTX_SIZE_QWEN3_6_Q2"
+      if [[ $vision -eq 1 ]]; then
+        image_min_tokens_arg="image-min-tokens = 1024"
+      fi
+    fi
+
     cat >> "$tmpfile" << EOF
 [$bm]
 model = ${MODEL_PATH[$bm]}
@@ -1123,6 +1135,8 @@ top-p = $top_p
 $reasoning_arg
 $moe_arg
 $mmproj_arg
+$ctx_size_arg
+$image_min_tokens_arg
 
 EOF
   done
@@ -1307,6 +1321,9 @@ CTX_SIZE_QWEN3_5=262144
 # Qwen3.6 MoE context window. 32K is safer for desktop use on 8GB VRAM.
 CTX_SIZE_QWEN3_6=32768
 
+# Qwen3.6 Q2_K_XL context window. Lighter quant, safe for 256K on 8GB VRAM.
+CTX_SIZE_QWEN3_6_Q2=262144
+
 # ============================================================================
 # Benchmark Settings
 # ============================================================================
@@ -1368,6 +1385,7 @@ show_profile() {
   echo "  CTX_SIZE_SMALL:     $LLAMA_CTX_SIZE_SMALL"
   echo "  CTX_SIZE_QWEN3_5:   $LLAMA_CTX_SIZE_QWEN3_5"
   echo "  CTX_SIZE_QWEN3_6:   $LLAMA_CTX_SIZE_QWEN3_6"
+  echo "  CTX_SIZE_QWEN3_6_Q2: $LLAMA_CTX_SIZE_QWEN3_6_Q2"
   echo ""
   echo "Router defaults"
   echo "  ROUTER_MODELS_MAX:  $ROUTER_MODELS_MAX"
@@ -1447,6 +1465,7 @@ Env overrides (5700X defaults):
   ROUTER_BATCH_SIZE=256 ROUTER_UBATCH_SIZE=64
   LLAMA_CTX_SIZE_QWEN3_5=262144
   LLAMA_CTX_SIZE_QWEN3_6=32768
+  LLAMA_CTX_SIZE_QWEN3_6_Q2=262144
   LLAMA_DIR=$HOME/applications/llama.cpp
   BENCH_REQUESTS=10     BENCH_N_PREDICT=256
 
@@ -1616,6 +1635,9 @@ if [[ $VISION -eq 1 ]]; then
   if [[ -n "${MODEL_MM_PROJ_PATH[$MODEL]+x}" ]]; then
     ensure_mmproj "$MODEL"
     VISION_ARGS=(--mmproj "${MODEL_MM_PROJ_PATH[$MODEL]}")
+    if [[ "$MODEL" == "qwen3_6_q2" ]]; then
+      VISION_ARGS+=(--image-min-tokens 1024)
+    fi
   else
     echo "Warning: no vision projector configured for $MODEL, ignoring --vision"
   fi
@@ -1642,6 +1664,7 @@ fi
 # Launch
 # shellcheck disable=SC2086
 exec "$LLAMA_SERVER" \
+  --webui-mcp-proxy
   --threads "$LLAMA_THREADS" \
   --threads-batch "$LLAMA_THREADS_BATCH" \
   --threads-http "$LLAMA_THREADS_HTTP" \

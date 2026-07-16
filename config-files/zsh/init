@@ -13,9 +13,9 @@ fi
 if command -v fzf &> /dev/null; then
   source <(fzf --zsh)
 
-  if [[ -f '~/.config/fzf/nord.sh' ]]; then
-    source '~/.config/fzf/nord.sh'
-  fi
+  # if [[ -f '~/.config/fzf/nord.sh' ]]; then
+  #   source '~/.config/fzf/nord.sh'
+  # fi
 
   if [[ -f /usr/share/fzf/completion.zsh ]]; then
     source /usr/share/fzf/completion.zsh

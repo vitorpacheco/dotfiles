@@ -44,6 +44,7 @@ export PATH=$PATH:$HOME/.local/npm/bin
 export PATH=$PATH:$HOME/.local/go/bin
 export PATH=$PATH:$HOME/.local/.npm-global/bin
 export PATH=$PATH:$HOME/.local/share/nvim/mason/bin
+export PATH=$PATH:$HOME/.lmstudio/bin
 
 export PATH=$PATH:$ANDROID_SDK_ROOT/platform-tools
 export PATH=$PATH:$ANDROID_SDK_ROOT/emulator
@@ -60,3 +61,4 @@ if [[ -f "$HOME/.profile-overrides" ]]; then
 fi
 
 . "$HOME/.local/share/../bin/env"
+

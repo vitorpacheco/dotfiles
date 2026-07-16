@@ -39,4 +39,6 @@ if [[ -z "${CURL_CA_BUNDLE:-}" && -f "/etc/ssl/certs/ca-certificates.crt" ]]; th
   export CURL_CA_BUNDLE="/etc/ssl/certs/ca-certificates.crt"
 fi
 
+export MESA_SHADER_CACHE_DIR="$HOME/.cache/mesa_shaders"
+
 # vim: ft=zsh

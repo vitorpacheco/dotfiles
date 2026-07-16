@@ -2,3 +2,9 @@ source ~/.config/zsh/rc
 
 
 . "$HOME/.local/share/../bin/env"
+
+export AI_MEMORY_SERVER_URL="https://ai-memory.vitorpacheco.dev"
+export AI_MEMORY_AUTH_TOKEN="$(cat ~/.config/ai-memory/token)"
+
+#. "$HOME/.local/share/../bin/env"
+

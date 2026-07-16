@@ -25,3 +25,7 @@ addToPathFront() {
 
 
 # vi: ft=zsh
+
+
+# Added by Antigravity CLI installer
+export PATH="/home/vitor/.local/bin:$PATH"
